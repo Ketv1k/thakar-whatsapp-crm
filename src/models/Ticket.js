@@ -23,9 +23,22 @@ const ticketSchema = new mongoose.Schema(
 // Auto-incrementing ticket number. Uses an atomic counter ($inc) rather than
 // "read the max and add one" so two webhook messages arriving at the same
 // instant can't be handed the same number and collide on the unique index.
-// Numbering starts at 1001.
+// Numbering starts at 1001 on a fresh database.
 ticketSchema.statics.nextTicketNumber = async function () {
-  return Counter.next('ticketNumber', 1000);
+  // First time only: seed the counter from the highest existing ticket number,
+  // so deploying over a database that already has tickets (e.g. from the old
+  // max-plus-one scheme) doesn't hand out numbers that are already taken.
+  const existing = await Counter.findById('ticketNumber').lean();
+  if (!existing) {
+    const last = await this.findOne().sort({ ticketNumber: -1 }).select('ticketNumber').lean();
+    const seed = last ? last.ticketNumber : 1000;
+    await Counter.updateOne(
+      { _id: 'ticketNumber' },
+      { $setOnInsert: { seq: seed } },
+      { upsert: true }
+    );
+  }
+  return Counter.next('ticketNumber');
 };
 
 module.exports = mongoose.model('Ticket', ticketSchema);

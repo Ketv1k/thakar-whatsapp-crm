@@ -47,11 +47,17 @@ router.post('/:id/reply', asyncHandler(async (req, res) => {
     sentByFounder: true,
   });
 
+  const wasResolved = ticket.status === 'resolved';
   ticket.status = 'founder_replied';
   ticket.lastActivityAt = new Date();
+  if (wasResolved) ticket.resolvedAt = null;
   await ticket.save();
 
+  // Replying reopens the conversation. If the ticket had been resolved, the
+  // resolve step cleared activeTicketId; restore it so the customer's next
+  // message attaches to this ticket instead of starting fresh triage.
   await Conversation.findByIdAndUpdate(ticket.conversationId, {
+    activeTicketId: ticket._id,
     lastMessageAt: new Date(),
     lastMessagePreview: body.slice(0, 140),
   });
