@@ -50,6 +50,9 @@ npm install
      before doing anything, so you migrate it to your own app rather than re-registering from scratch.
 3. Under **Configuration**, set your webhook URL to `https://<your-domain>/webhook` and the verify token
    to whatever you put in `WHATSAPP_VERIFY_TOKEN`. Subscribe to the `messages` field.
+4. Copy your **App Secret** (Settings → Basic) into `WHATSAPP_APP_SECRET`. The webhook uses it to verify
+   Meta's `X-Hub-Signature-256` on every incoming POST and reject forged requests. If you leave it blank
+   the server still runs but logs a warning and accepts unauthenticated webhooks — set it before going live.
 
 ### 3. Get your Shopify Admin API token
 Shopify Admin → Settings → Apps and sales channels → Develop apps → Create an app →
@@ -78,11 +81,34 @@ app.use(whatsappCrm);
 ```
 Copy this project's `src/models/*` into wherever your existing models live (or just require them from
 here), make sure your existing app connects to the same MongoDB, serve `public/` as static files, and
-call `require('./thakar-whatsapp-crm/src/jobs/slaCheck').startSlaCheckJob()` once at startup.
+call `require('./thakar-whatsapp-crm/src/jobs/slaCheck').startSlaCheckJob()` once at startup. Mount this
+app *before* any global `express.json()` in your existing backend (see the note under "Production
+hardening" below) so the webhook can verify Meta's signature.
 
 ### 6. Local testing before going live
 WhatsApp needs a public HTTPS URL to send webhooks to. For local testing, use `ngrok http 3000` and put
 that URL (+ `/webhook`) into Meta's webhook config temporarily.
+
+Run the unit tests (triage rules + webhook signature verification) with:
+```
+npm test
+```
+
+## Production hardening (built in)
+- **Webhook authenticity** — every `POST /webhook` is checked against Meta's `X-Hub-Signature-256`
+  using `WHATSAPP_APP_SECRET` (fails closed when the secret is set). The `GET` handshake still uses
+  `WHATSAPP_VERIFY_TOKEN`.
+- **Duplicate deliveries** — Meta retries webhooks, so inbound messages are de-duplicated on the
+  WhatsApp message id (unique index + pre-check). A retried message won't double-reply or open a
+  second ticket.
+- **Ticket numbers** — handed out via an atomic counter, so two messages arriving at once can't collide.
+- **Robust API** — async routes can't crash the process on bad input; a malformed `:id`, oversized
+  body, or bad JSON returns a clean 4xx instead of a stack trace. The Inbox API key is compared in
+  constant time.
+
+> **Mounting into an existing backend:** the webhook needs the *raw* request body to verify Meta's
+> signature. Don't run a global `express.json()` ahead of these routes — let this app's own scoped
+> parsers handle body parsing (they capture the raw bytes for you).
 
 ## Not built yet (Phase 2 / 3, per our plan)
 - Marketing broadcasts to a customer segment

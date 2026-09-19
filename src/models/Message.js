@@ -15,4 +15,10 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Idempotency guard: Meta retries webhook deliveries aggressively, so the same
+// inbound message can arrive more than once. A unique index on the WhatsApp
+// message id lets a duplicate insert fail fast (code 11000) instead of creating
+// a second copy. Sparse so our outbound messages (waMessageId: null) are exempt.
+messageSchema.index({ waMessageId: 1 }, { unique: true, sparse: true });
+
 module.exports = mongoose.model('Message', messageSchema);

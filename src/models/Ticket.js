@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Counter = require('./Counter');
 
 const ticketSchema = new mongoose.Schema(
   {
@@ -19,10 +20,12 @@ const ticketSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Simple auto-incrementing ticket number without needing a separate counter collection library.
+// Auto-incrementing ticket number. Uses an atomic counter ($inc) rather than
+// "read the max and add one" so two webhook messages arriving at the same
+// instant can't be handed the same number and collide on the unique index.
+// Numbering starts at 1001.
 ticketSchema.statics.nextTicketNumber = async function () {
-  const last = await this.findOne().sort({ ticketNumber: -1 }).select('ticketNumber').lean();
-  return last ? last.ticketNumber + 1 : 1001;
+  return Counter.next('ticketNumber', 1000);
 };
 
 module.exports = mongoose.model('Ticket', ticketSchema);
