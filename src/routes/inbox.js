@@ -4,8 +4,14 @@ const Message = require('../models/Message');
 const Ticket = require('../models/Ticket');
 const whatsapp = require('../services/whatsapp');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { attachCustomerNames } = require('../utils/customerNames');
 
 const router = express.Router();
+
+// Small config the Founder Inbox reads once (e.g. to flag tickets past SLA).
+router.get('/config', (req, res) => {
+  res.json({ slaHours: Number(process.env.SLA_HOURS || 6) });
+});
 
 // General chats only - anything with an active ticket lives in the Tickets tab instead,
 // so nothing shows up twice.
@@ -14,6 +20,7 @@ router.get('/conversations', asyncHandler(async (req, res) => {
     .sort({ lastMessageAt: -1 })
     .limit(100)
     .lean();
+  await attachCustomerNames(conversations);
   res.json(conversations);
 }));
 

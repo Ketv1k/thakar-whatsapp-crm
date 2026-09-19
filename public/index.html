@@ -14,34 +14,51 @@
 
     <!-- Login: enter the INBOX_API_KEY once, stored on this device only -->
     <div id="login-screen">
+      <div class="login-logo">TK</div>
       <h1>Thakar Kitchen Inbox</h1>
-      <p>Enter your access code to continue</p>
-      <input id="login-input" type="password" placeholder="Access code" />
+      <p>Enter your access code to continue. You'll only need to do this once on this phone.</p>
+      <input id="login-input" type="password" inputmode="text" autocomplete="off" placeholder="Access code" />
       <button id="login-button">Continue</button>
+      <div id="login-error" class="login-error hidden">That access code was rejected — check it and try again.</div>
     </div>
 
     <!-- Main app: hidden until logged in -->
-    <div id="main-screen" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+    <div id="main-screen" class="hidden">
       <div class="topbar">
-        <span id="topbar-title">Tickets</span>
-        <button id="refresh-button">Refresh</button>
+        <button id="back-button" class="icon-btn hidden" aria-label="Back">‹</button>
+        <div class="topbar-titles">
+          <span id="topbar-title">Tickets</span>
+          <span id="topbar-subtitle" class="topbar-subtitle hidden"></span>
+        </div>
+        <button id="refresh-button" class="icon-btn" aria-label="Refresh">↻</button>
       </div>
 
-      <div id="list-screen" class="screen"></div>
+      <!-- List view (tickets or chats) -->
+      <div id="list-view">
+        <div id="ticket-filter" class="filter-row hidden">
+          <button data-filter="open" class="active">Needs attention</button>
+          <button data-filter="resolved">Resolved</button>
+        </div>
+        <div id="list-screen" class="screen"></div>
+      </div>
 
-      <div id="thread-screen" class="screen hidden" style="display:flex; flex-direction:column;">
-        <div id="thread-messages" style="flex:1; overflow-y:auto;"></div>
+      <!-- Thread view (one conversation) -->
+      <div id="thread-screen" class="hidden">
+        <div id="thread-messages"></div>
         <div id="quick-replies" class="quick-replies"></div>
         <div id="thread-actions" class="thread-actions hidden"></div>
         <div class="composer">
-          <textarea id="composer-input" rows="1" placeholder="Type a reply..."></textarea>
-          <button id="composer-send">Send</button>
+          <textarea id="composer-input" rows="1" placeholder="Type a reply…"></textarea>
+          <button id="composer-send" aria-label="Send">Send</button>
         </div>
       </div>
 
       <div class="bottom-nav">
-        <button id="nav-tickets" class="active">Tickets <span id="tickets-count" class="count hidden">0</span></button>
-        <button id="nav-chats">Chats</button>
+        <button id="nav-tickets" class="active">
+          <span class="nav-label">Tickets</span>
+          <span id="tickets-count" class="count hidden">0</span>
+        </button>
+        <button id="nav-chats"><span class="nav-label">Chats</span></button>
       </div>
     </div>
 

@@ -11,21 +11,45 @@ const QUICK_REPLIES = [
   'Replacement is on its way.',
 ];
 
+// Plain-English labels so the founder never sees internal codes like
+// "founder_replied" or "wrong_item".
+const STATUS_LABELS = {
+  open: 'New — needs a reply',
+  founder_replied: 'You replied',
+  resolved: 'Resolved',
+};
+const ISSUE_LABELS = {
+  delay: 'Late delivery',
+  damaged: 'Damaged',
+  wrong_item: 'Wrong item',
+  missing: 'Missing item',
+  refund_request: 'Refund request',
+  other: 'Other',
+};
+const ISSUE_TYPES = ['delay', 'damaged', 'wrong_item', 'missing', 'refund_request', 'other'];
+
 let apiKey = localStorage.getItem(API_KEY_STORAGE) || '';
 let currentTab = 'tickets'; // 'tickets' | 'chats'
+let ticketFilter = 'open'; // 'open' | 'resolved'
 let currentThread = null; // { kind: 'ticket'|'chat', id, data }
 let listCache = [];
+let slaHours = 6;
 
 // ---------- DOM refs ----------
 const el = (id) => document.getElementById(id);
 const loginScreen = el('login-screen');
+const loginError = el('login-error');
 const mainScreen = el('main-screen');
+const listView = el('list-view');
 const listScreen = el('list-screen');
+const ticketFilterEl = el('ticket-filter');
 const threadScreen = el('thread-screen');
 const threadMessages = el('thread-messages');
 const threadActions = el('thread-actions');
 const quickRepliesEl = el('quick-replies');
 const topbarTitle = el('topbar-title');
+const topbarSubtitle = el('topbar-subtitle');
+const backButton = el('back-button');
 const ticketsCountEl = el('tickets-count');
 
 // ---------- API helper ----------
@@ -56,30 +80,56 @@ function showLogin() {
 function showMain() {
   loginScreen.classList.add('hidden');
   mainScreen.classList.remove('hidden');
-  mainScreen.style.display = 'flex';
 }
 
-el('login-button').addEventListener('click', async () => {
+el('login-button').addEventListener('click', doLogin);
+el('login-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
   const value = el('login-input').value.trim();
   if (!value) return;
   apiKey = value;
+  loginError.classList.add('hidden');
   try {
     await api('/api/tickets'); // sanity check the key works
     localStorage.setItem(API_KEY_STORAGE, apiKey);
     showMain();
+    loadConfig();
     loadList();
   } catch (err) {
-    alert('That access code was rejected - check it and try again.');
+    loginError.classList.remove('hidden');
   }
-});
+}
 
-// ---------- Tabs ----------
+async function loadConfig() {
+  try {
+    const cfg = await api('/api/config');
+    if (cfg && cfg.slaHours) slaHours = cfg.slaHours;
+  } catch (err) {
+    /* keep default */
+  }
+}
+
+// ---------- Tabs & navigation ----------
 el('nav-tickets').addEventListener('click', () => switchTab('tickets'));
 el('nav-chats').addEventListener('click', () => switchTab('chats'));
+backButton.addEventListener('click', closeThread);
 el('refresh-button').addEventListener('click', () => {
-  if (threadScreen.classList.contains('hidden')) loadList();
-  else openThread(currentThread.kind, currentThread.id);
+  if (currentThread) openThread(currentThread.kind, currentThread.id);
+  else loadList();
 });
+
+for (const btn of ticketFilterEl.querySelectorAll('button')) {
+  btn.addEventListener('click', () => {
+    ticketFilter = btn.dataset.filter;
+    for (const b of ticketFilterEl.querySelectorAll('button')) {
+      b.classList.toggle('active', b === btn);
+    }
+    loadList();
+  });
+}
 
 function switchTab(tab) {
   currentTab = tab;
@@ -91,44 +141,69 @@ function switchTab(tab) {
 
 // ---------- List screen ----------
 async function loadList() {
-  topbarTitle.textContent = currentTab === 'tickets' ? 'Tickets' : 'Chats';
-  listScreen.innerHTML = '<div class="empty-state">Loading...</div>';
+  const isTickets = currentTab === 'tickets';
+  topbarTitle.textContent = isTickets ? 'Tickets' : 'Chats';
+  topbarSubtitle.classList.add('hidden');
+  ticketFilterEl.classList.toggle('hidden', !isTickets);
+  listScreen.innerHTML = '<div class="empty-state">Loading…</div>';
 
   try {
-    if (currentTab === 'tickets') {
-      listCache = await api('/api/tickets');
+    if (isTickets) {
+      const path = ticketFilter === 'resolved' ? '/api/tickets?status=resolved' : '/api/tickets';
+      listCache = await api(path);
       renderTicketList(listCache);
     } else {
       listCache = await api('/api/conversations');
       renderChatList(listCache);
     }
   } catch (err) {
-    listScreen.innerHTML = '<div class="empty-state">Could not load. Pull to refresh or check your connection.</div>';
+    listScreen.innerHTML =
+      '<div class="empty-state">Couldn\'t load. Check your connection and tap ↻ to try again.</div>';
   }
 }
 
-function renderTicketList(tickets) {
-  const openCount = tickets.filter((t) => t.status !== 'resolved').length;
+function displayName(item) {
+  return (item.customerName && item.customerName.trim()) || item.customerPhone || 'Unknown';
+}
+
+function isOverdue(ticket) {
+  if (ticket.status === 'resolved') return false;
+  const age = Date.now() - new Date(ticket.lastActivityAt).getTime();
+  return age > slaHours * 60 * 60 * 1000;
+}
+
+function updateTicketBadge(openCount) {
   ticketsCountEl.textContent = openCount;
   ticketsCountEl.classList.toggle('hidden', openCount === 0);
+}
+
+function renderTicketList(tickets) {
+  // The nav badge always reflects tickets that still need attention.
+  if (ticketFilter === 'open') updateTicketBadge(tickets.length);
 
   if (tickets.length === 0) {
-    listScreen.innerHTML = '<div class="empty-state">No open tickets. 🎉</div>';
+    listScreen.innerHTML =
+      ticketFilter === 'resolved'
+        ? '<div class="empty-state">No resolved tickets yet.</div>'
+        : '<div class="empty-state"><span class="big">✅</span>All caught up! No tickets need attention.</div>';
     return;
   }
+
   listScreen.innerHTML = '';
   for (const t of tickets) {
+    const overdue = isOverdue(t);
     const item = document.createElement('div');
-    item.className = 'list-item';
+    item.className = 'list-item' + (overdue ? ' attention' : '');
     item.innerHTML = `
       <div class="row1">
-        <span class="title">#${t.ticketNumber} · ${t.customerPhone}</span>
+        <span class="name">${escapeHtml(displayName(t))}</span>
         <span class="time">${relativeTime(t.lastActivityAt)}</span>
       </div>
-      <div>
-        <span class="badge badge-${t.issueType}">${t.issueType.replace('_', ' ')}</span>
-        <span class="preview" style="margin-left:6px;">${t.status.replace('_', ' ')}</span>
+      <div class="row2">
+        <span class="badge badge-${t.issueType}">${escapeHtml(ISSUE_LABELS[t.issueType] || t.issueType)}</span>
+        ${overdue ? '<span class="attention-pill">Needs attention</span>' : `<span class="status-pill">${escapeHtml(statusLabel(t.status))}</span>`}
       </div>
+      <div class="row2"><span class="ticket-no">Ticket #${t.ticketNumber}</span></div>
     `;
     item.addEventListener('click', () => openThread('ticket', t._id));
     listScreen.appendChild(item);
@@ -143,10 +218,10 @@ function renderChatList(conversations) {
   listScreen.innerHTML = '';
   for (const c of conversations) {
     const item = document.createElement('div');
-    item.className = 'list-item';
+    item.className = 'list-item' + (c.unread ? ' attention' : '');
     item.innerHTML = `
       <div class="row1">
-        <span class="title">${c.customerPhone}</span>
+        <span class="name">${escapeHtml(displayName(c))}</span>
         <span class="time">${relativeTime(c.lastMessageAt)}</span>
       </div>
       <div class="preview">${escapeHtml(c.lastMessagePreview || '')}</div>
@@ -158,11 +233,10 @@ function renderChatList(conversations) {
 
 // ---------- Thread screen ----------
 async function openThread(kind, id) {
-  listScreen.classList.add('hidden');
+  listView.classList.add('hidden');
   threadScreen.classList.remove('hidden');
-  threadScreen.style.display = 'flex';
-  threadMessages.innerHTML = '<div class="empty-state">Loading...</div>';
-  topbarTitle.textContent = kind === 'ticket' ? 'Ticket' : 'Chat';
+  backButton.classList.remove('hidden');
+  threadMessages.innerHTML = '<div class="empty-state">Loading…</div>';
 
   try {
     let messages, data;
@@ -172,30 +246,55 @@ async function openThread(kind, id) {
       messages = res.messages;
     } else {
       messages = await api(`/api/conversations/${id}/messages`);
-      data = listCache.find((c) => c._id === id);
+      data = listCache.find((c) => c._id === id) || {};
     }
     currentThread = { kind, id, data };
+
+    topbarTitle.textContent = displayName(data);
+    if (kind === 'ticket') {
+      topbarSubtitle.textContent = `Ticket #${data.ticketNumber} · ${ISSUE_LABELS[data.issueType] || data.issueType}`;
+    } else {
+      topbarSubtitle.textContent = data.customerName ? data.customerPhone : 'General chat';
+    }
+    topbarSubtitle.classList.remove('hidden');
+
     renderMessages(messages);
     renderQuickReplies();
     renderThreadActions();
   } catch (err) {
-    threadMessages.innerHTML = '<div class="empty-state">Could not load this thread.</div>';
+    threadMessages.innerHTML = '<div class="empty-state">Couldn\'t load this conversation.</div>';
   }
 }
 
 function closeThread() {
   currentThread = null;
   threadScreen.classList.add('hidden');
-  listScreen.classList.remove('hidden');
+  listView.classList.remove('hidden');
+  backButton.classList.add('hidden');
+  topbarSubtitle.classList.add('hidden');
+  topbarTitle.textContent = currentTab === 'tickets' ? 'Tickets' : 'Chats';
 }
 
 function renderMessages(messages) {
   threadMessages.innerHTML = '';
+  if (!messages || messages.length === 0) {
+    threadMessages.innerHTML = '<div class="empty-state">No messages yet.</div>';
+    return;
+  }
   for (const m of messages) {
+    const wrap = document.createElement('div');
+    wrap.className = `msg msg-${m.direction}`;
     const bubble = document.createElement('div');
-    bubble.className = `bubble ${m.direction}`;
+    bubble.className = 'bubble';
     bubble.textContent = m.body;
-    threadMessages.appendChild(bubble);
+    wrap.appendChild(bubble);
+    if (m.createdAt) {
+      const time = document.createElement('div');
+      time.className = 'bubble-time';
+      time.textContent = clockTime(m.createdAt);
+      wrap.appendChild(time);
+    }
+    threadMessages.appendChild(wrap);
   }
   threadMessages.scrollTop = threadMessages.scrollHeight;
 }
@@ -204,7 +303,7 @@ function renderQuickReplies() {
   quickRepliesEl.innerHTML = '';
   for (const text of QUICK_REPLIES) {
     const btn = document.createElement('button');
-    btn.textContent = text.length > 28 ? text.slice(0, 26) + '...' : text;
+    btn.textContent = text.length > 28 ? text.slice(0, 26) + '…' : text;
     btn.title = text;
     btn.addEventListener('click', () => {
       el('composer-input').value = text;
@@ -216,33 +315,74 @@ function renderQuickReplies() {
 
 function renderThreadActions() {
   threadActions.innerHTML = '';
+  threadActions.classList.remove('hidden');
+
   if (currentThread.kind === 'ticket') {
-    threadActions.classList.remove('hidden');
+    if (currentThread.data.status === 'resolved') {
+      const note = document.createElement('div');
+      note.className = 'actions-label';
+      note.textContent = 'This ticket is resolved. Replying will reopen the conversation.';
+      threadActions.appendChild(note);
+      return;
+    }
     const resolveBtn = document.createElement('button');
     resolveBtn.className = 'primary';
-    resolveBtn.textContent = 'Mark resolved';
+    resolveBtn.textContent = '✓ Mark resolved';
     resolveBtn.addEventListener('click', async () => {
-      await api(`/api/tickets/${currentThread.id}/resolve`, { method: 'POST' });
-      closeThread();
-      loadList();
+      if (!confirm(`Mark ticket #${currentThread.data.ticketNumber} as resolved?`)) return;
+      try {
+        await api(`/api/tickets/${currentThread.id}/resolve`, { method: 'POST' });
+        closeThread();
+        loadList();
+      } catch (err) {
+        alert('Could not update the ticket. Please try again.');
+      }
     });
     threadActions.appendChild(resolveBtn);
   } else {
-    threadActions.classList.remove('hidden');
     const flagBtn = document.createElement('button');
-    flagBtn.textContent = 'Flag as issue / ticket';
-    flagBtn.addEventListener('click', async () => {
-      const type = prompt('Issue type: delay, damaged, wrong_item, missing, refund_request, other', 'other');
-      if (!type) return;
-      await api(`/api/conversations/${currentThread.id}/flag-ticket`, {
-        method: 'POST',
-        body: JSON.stringify({ issueType: type }),
-      });
-      closeThread();
-      switchTab('tickets');
-    });
+    flagBtn.textContent = '⚑ Flag as an issue';
+    flagBtn.addEventListener('click', showIssuePicker);
     threadActions.appendChild(flagBtn);
   }
+}
+
+// Tappable issue-type picker (replaces the old typed prompt).
+function showIssuePicker() {
+  threadActions.innerHTML = '';
+  const label = document.createElement('div');
+  label.className = 'actions-label';
+  label.textContent = 'What kind of issue is this?';
+  threadActions.appendChild(label);
+
+  for (const type of ISSUE_TYPES) {
+    const chip = document.createElement('button');
+    chip.className = 'chip';
+    chip.textContent = ISSUE_LABELS[type];
+    chip.addEventListener('click', async () => {
+      try {
+        await api(`/api/conversations/${currentThread.id}/flag-ticket`, {
+          method: 'POST',
+          body: JSON.stringify({ issueType: type }),
+        });
+        closeThread();
+        ticketFilter = 'open';
+        for (const b of ticketFilterEl.querySelectorAll('button')) {
+          b.classList.toggle('active', b.dataset.filter === 'open');
+        }
+        switchTab('tickets');
+      } catch (err) {
+        alert('Could not flag this chat. Please try again.');
+      }
+    });
+    threadActions.appendChild(chip);
+  }
+
+  const cancel = document.createElement('button');
+  cancel.className = 'chip chip-cancel';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', renderThreadActions);
+  threadActions.appendChild(cancel);
 }
 
 el('composer-send').addEventListener('click', sendReply);
@@ -268,31 +408,44 @@ async function sendReply() {
     await api(path, { method: 'POST', body: JSON.stringify({ body }) });
     openThread(currentThread.kind, currentThread.id); // reload thread to show the sent message
   } catch (err) {
-    alert('Could not send - check your connection and try again.');
+    alert('Could not send — check your connection and try again.');
     input.value = body;
   }
 }
 
 // ---------- Utilities ----------
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status;
+}
+
 function relativeTime(dateStr) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const mins = Math.round(diffMs / 60000);
   if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return `${mins}m ago`;
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function clockTime(dateStr) {
+  try {
+    return new Date(dateStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } catch (err) {
+    return '';
+  }
 }
 
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = str == null ? '' : String(str);
   return div.innerHTML;
 }
 
 // ---------- Boot ----------
 if (apiKey) {
   showMain();
+  loadConfig();
   loadList();
 } else {
   showLogin();
@@ -301,8 +454,7 @@ if (apiKey) {
 // Poll for updates every 25s while looking at a list (cheap, avoids needing websockets).
 setInterval(() => {
   const loggedIn = loginScreen.classList.contains('hidden');
-  const onListScreen = threadScreen.classList.contains('hidden');
-  if (apiKey && loggedIn && onListScreen) {
+  if (apiKey && loggedIn && !currentThread) {
     loadList();
   }
 }, 25000);
