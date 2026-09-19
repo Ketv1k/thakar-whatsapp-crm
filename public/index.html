@@ -30,6 +30,7 @@
           <span id="topbar-title">Tickets</span>
           <span id="topbar-subtitle" class="topbar-subtitle hidden"></span>
         </div>
+        <button id="profile-button" class="icon-btn hidden" aria-label="View customer">&#128100;</button>
         <button id="refresh-button" class="icon-btn" aria-label="Refresh">↻</button>
       </div>
 
@@ -51,6 +52,11 @@
           <textarea id="composer-input" rows="1" placeholder="Type a reply…"></textarea>
           <button id="composer-send" aria-label="Send">Send</button>
         </div>
+      </div>
+
+      <!-- Customer profile (CRM) -->
+      <div id="profile-screen" class="screen hidden">
+        <div id="profile-body"></div>
       </div>
 
       <div class="bottom-nav">

@@ -50,6 +50,9 @@ const quickRepliesEl = el('quick-replies');
 const topbarTitle = el('topbar-title');
 const topbarSubtitle = el('topbar-subtitle');
 const backButton = el('back-button');
+const profileButton = el('profile-button');
+const profileScreen = el('profile-screen');
+const profileBody = el('profile-body');
 const ticketsCountEl = el('tickets-count');
 
 // ---------- API helper ----------
@@ -115,9 +118,20 @@ async function loadConfig() {
 // ---------- Tabs & navigation ----------
 el('nav-tickets').addEventListener('click', () => switchTab('tickets'));
 el('nav-chats').addEventListener('click', () => switchTab('chats'));
-backButton.addEventListener('click', closeThread);
+backButton.addEventListener('click', () => {
+  // From a profile, "back" returns to the conversation it was opened from.
+  if (!profileScreen.classList.contains('hidden') && currentThread) {
+    openThread(currentThread.kind, currentThread.id);
+  } else {
+    closeThread();
+  }
+});
+profileButton.addEventListener('click', () => {
+  if (currentThread) showProfile(currentThread.data.customerPhone);
+});
 el('refresh-button').addEventListener('click', () => {
-  if (currentThread) openThread(currentThread.kind, currentThread.id);
+  if (!profileScreen.classList.contains('hidden') && currentThread) showProfile(currentThread.data.customerPhone);
+  else if (currentThread) openThread(currentThread.kind, currentThread.id);
   else loadList();
 });
 
@@ -234,8 +248,10 @@ function renderChatList(conversations) {
 // ---------- Thread screen ----------
 async function openThread(kind, id) {
   listView.classList.add('hidden');
+  profileScreen.classList.add('hidden');
   threadScreen.classList.remove('hidden');
   backButton.classList.remove('hidden');
+  profileButton.classList.remove('hidden');
   threadMessages.innerHTML = '<div class="empty-state">Loading…</div>';
 
   try {
@@ -269,10 +285,148 @@ async function openThread(kind, id) {
 function closeThread() {
   currentThread = null;
   threadScreen.classList.add('hidden');
+  profileScreen.classList.add('hidden');
   listView.classList.remove('hidden');
   backButton.classList.add('hidden');
+  profileButton.classList.add('hidden');
   topbarSubtitle.classList.add('hidden');
   topbarTitle.textContent = currentTab === 'tickets' ? 'Tickets' : 'Chats';
+}
+
+// ---------- Customer profile (CRM) ----------
+async function showProfile(phone) {
+  threadScreen.classList.add('hidden');
+  listView.classList.add('hidden');
+  profileScreen.classList.remove('hidden');
+  backButton.classList.remove('hidden');
+  profileButton.classList.add('hidden');
+  topbarTitle.textContent = 'Customer';
+  topbarSubtitle.classList.add('hidden');
+  profileBody.innerHTML = '<div class="empty-state">Loading…</div>';
+
+  try {
+    const p = await api(`/api/customers/${phone}`);
+    renderProfile(p);
+  } catch (err) {
+    profileBody.innerHTML = '<div class="empty-state">Couldn\'t load this customer.</div>';
+  }
+}
+
+function money(amount, currency) {
+  const n = Number(amount) || 0;
+  if (currency === 'INR' || !currency) return '₹' + n.toLocaleString('en-IN');
+  return `${n.toLocaleString()} ${currency}`;
+}
+
+function renderProfile(p) {
+  const s = p.shopify || { found: false };
+  const name = p.name || p.phone;
+  const orderRows = (s.orders || [])
+    .map(
+      (o) => `
+      <div class="profile-row">
+        <div><div>${escapeHtml(o.name)}</div><div class="sub">${new Date(o.createdAt).toLocaleDateString()} · ${escapeHtml(fulfilLabel(o.fulfillmentStatus))}</div></div>
+        <span class="amount">${money(o.total, s.currency)}</span>
+      </div>`
+    )
+    .join('');
+
+  const ticketRows = (p.tickets || [])
+    .map(
+      (t) => `
+      <div class="profile-row">
+        <div><div>${escapeHtml(ISSUE_LABELS[t.issueType] || t.issueType)}</div><div class="sub">Ticket #${t.ticketNumber} · ${escapeHtml(statusLabel(t.status))}</div></div>
+        <span class="sub">${relativeTime(t.lastActivityAt)}</span>
+      </div>`
+    )
+    .join('');
+
+  profileBody.innerHTML = `
+    <div class="profile-head">
+      <span class="profile-status status-${p.status}">${escapeHtml(p.statusLabel || p.status)}</span>
+      <div class="profile-name">${escapeHtml(name)}</div>
+      <div class="profile-phone">${escapeHtml(p.phone)}</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="value">${s.found ? s.ordersCount : '—'}</div><div class="label">Orders</div></div>
+      <div class="stat"><div class="value">${s.found ? money(s.totalSpent, s.currency) : '—'}</div><div class="label">Total spent</div></div>
+      <div class="stat"><div class="value">${s.lastOrderAt ? relativeTime(s.lastOrderAt) : '—'}</div><div class="label">Last order</div></div>
+    </div>
+
+    <div class="profile-section">
+      <h3>Order history</h3>
+      <div class="profile-card">
+        ${s.error ? '<div class="profile-empty">Couldn\'t reach Shopify right now.</div>' : orderRows || '<div class="profile-empty">No orders found for this number.</div>'}
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3>Past tickets</h3>
+      <div class="profile-card">
+        ${ticketRows || '<div class="profile-empty">No support tickets yet.</div>'}
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3>Private note</h3>
+      <textarea id="notes-area" class="notes-area" placeholder="e.g. Allergic to nuts · prefers Sunday delivery · buys in bulk for her studio">${escapeHtml(p.notes || '')}</textarea>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <button id="notes-save" class="notes-save">Save note</button>
+        <span id="notes-saved" class="notes-saved hidden">Saved ✓</span>
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3>Marketing</h3>
+      <label class="optin-row">
+        <div>
+          <div class="optin-label">Opted in to marketing</div>
+          <div class="optin-sub">Include this customer in broadcasts</div>
+        </div>
+        <span class="switch"><input type="checkbox" id="optin-toggle" ${p.optedInMarketing ? 'checked' : ''}><span class="track"></span></span>
+      </label>
+    </div>
+  `;
+
+  el('notes-save').addEventListener('click', async () => {
+    try {
+      await api(`/api/customers/${p.phone}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ notes: el('notes-area').value }),
+      });
+      const saved = el('notes-saved');
+      saved.classList.remove('hidden');
+      setTimeout(() => saved.classList.add('hidden'), 2000);
+    } catch (err) {
+      alert('Could not save the note. Please try again.');
+    }
+  });
+
+  el('optin-toggle').addEventListener('change', async (e) => {
+    try {
+      await api(`/api/customers/${p.phone}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ optedInMarketing: e.target.checked }),
+      });
+    } catch (err) {
+      e.target.checked = !e.target.checked;
+      alert('Could not update. Please try again.');
+    }
+  });
+}
+
+function fulfilLabel(status) {
+  const map = {
+    UNFULFILLED: 'Not shipped',
+    PARTIALLY_FULFILLED: 'Partly shipped',
+    FULFILLED: 'Shipped',
+    RESTOCKED: 'Returned',
+    IN_PROGRESS: 'Packing',
+    ON_HOLD: 'On hold',
+    SCHEDULED: 'Scheduled',
+  };
+  return map[status] || 'Processing';
 }
 
 function renderMessages(messages) {

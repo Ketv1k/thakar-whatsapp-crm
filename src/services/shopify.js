@@ -95,6 +95,64 @@ async function getLatestOrderStatusByPhone(phone) {
   };
 }
 
+/**
+ * Assembles a customer's order history for the CRM profile: how many orders,
+ * how much they've spent (lifetime), when they last ordered, and their most
+ * recent orders. Returns { found: false } when there's no matching customer.
+ */
+async function getCustomerSummaryByPhone(phone) {
+  const api = client();
+  const query = `
+    query CustomerSummary($searchQuery: String!) {
+      customers(first: 1, query: $searchQuery) {
+        edges {
+          node {
+            id
+            displayName
+            numberOfOrders
+            amountSpent { amount currencyCode }
+            orders(first: 5, sortKey: CREATED_AT, reverse: true) {
+              edges {
+                node {
+                  name
+                  createdAt
+                  displayFulfillmentStatus
+                  currentTotalPriceSet { shopMoney { amount currencyCode } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const { data } = await api.post('/graphql.json', {
+    query,
+    variables: { searchQuery: `phone:${toE164(phone)}` },
+  });
+
+  const node = data?.data?.customers?.edges?.[0]?.node;
+  if (!node) return { found: false };
+
+  const orders = (node.orders?.edges || []).map((e) => ({
+    name: e.node.name,
+    createdAt: e.node.createdAt,
+    fulfillmentStatus: e.node.displayFulfillmentStatus,
+    total: Number(e.node.currentTotalPriceSet?.shopMoney?.amount || 0),
+  }));
+
+  return {
+    found: true,
+    customerName: node.displayName || '',
+    ordersCount: Number(node.numberOfOrders || 0),
+    totalSpent: Number(node.amountSpent?.amount || 0),
+    currency: node.amountSpent?.currencyCode || 'INR',
+    lastOrderAt: orders[0]?.createdAt || null,
+    orders,
+  };
+}
+
 // Turns a lookup result into a short, friendly WhatsApp reply.
 function composeStatusReplyText(orderInfo) {
   if (!orderInfo) {
@@ -110,4 +168,9 @@ function composeStatusReplyText(orderInfo) {
   return text;
 }
 
-module.exports = { getLatestOrderStatusByPhone, composeStatusReplyText, toE164 };
+module.exports = {
+  getLatestOrderStatusByPhone,
+  getCustomerSummaryByPhone,
+  composeStatusReplyText,
+  toE164,
+};

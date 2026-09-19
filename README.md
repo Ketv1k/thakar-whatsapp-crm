@@ -110,6 +110,23 @@ npm test
 > signature. Don't run a global `express.json()` ahead of these routes — let this app's own scoped
 > parsers handle body parsing (they capture the raw bytes for you).
 
+## Customer profiles (CRM)
+
+Tap the person icon in any conversation to see a customer's full profile, assembled
+automatically — no manual data entry:
+
+- **Automatic status** — New / Returning / VIP, worked out from their Shopify order
+  history (tune the thresholds via `CRM_RETURNING_ORDERS`, `CRM_VIP_ORDERS`,
+  `CRM_VIP_SPEND`).
+- **Order history + lifetime spend** — pulled live from Shopify.
+- **Past tickets** — every support issue this customer has raised.
+- **Private note** — the one thing you type: allergies, delivery preferences, "buys in
+  bulk", etc.
+- **Marketing opt-in** — toggle that will feed Phase 2 broadcasts.
+
+API: `GET /api/customers/:phone` returns the assembled profile; `PATCH /api/customers/:phone`
+updates the note / opt-in. Both require the Inbox API key.
+
 ## Not built yet (Phase 2 / 3, per our plan)
 - Marketing broadcasts to a customer segment
 - Abandoned cart recovery

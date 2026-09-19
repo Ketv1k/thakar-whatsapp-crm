@@ -17,6 +17,7 @@ const cors = require('cors');
 const webhookRoutes = require('./routes/webhook');
 const inboxRoutes = require('./routes/inbox');
 const ticketRoutes = require('./routes/tickets');
+const customerRoutes = require('./routes/customers');
 const { requireInboxAuth } = require('./middleware/auth');
 const { verifyWhatsAppSignature } = require('./middleware/verifyWhatsAppSignature');
 
@@ -42,6 +43,7 @@ app.use('/webhook', webhookJson, verifyWhatsAppSignature, webhookRoutes);
 // Everything the Founder Inbox PWA calls - protected by the shared INBOX_API_KEY.
 app.use('/api', apiJson, requireInboxAuth, inboxRoutes);
 app.use('/api/tickets', apiJson, requireInboxAuth, ticketRoutes);
+app.use('/api/customers', apiJson, requireInboxAuth, customerRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
