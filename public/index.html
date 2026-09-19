@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Thakar Kitchen Inbox</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon.svg" />
+  <meta name="theme-color" content="#b45309" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Login: enter the INBOX_API_KEY once, stored on this device only -->
+    <div id="login-screen">
+      <h1>Thakar Kitchen Inbox</h1>
+      <p>Enter your access code to continue</p>
+      <input id="login-input" type="password" placeholder="Access code" />
+      <button id="login-button">Continue</button>
+    </div>
+
+    <!-- Main app: hidden until logged in -->
+    <div id="main-screen" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+      <div class="topbar">
+        <span id="topbar-title">Tickets</span>
+        <button id="refresh-button">Refresh</button>
+      </div>
+
+      <div id="list-screen" class="screen"></div>
+
+      <div id="thread-screen" class="screen hidden" style="display:flex; flex-direction:column;">
+        <div id="thread-messages" style="flex:1; overflow-y:auto;"></div>
+        <div id="quick-replies" class="quick-replies"></div>
+        <div id="thread-actions" class="thread-actions hidden"></div>
+        <div class="composer">
+          <textarea id="composer-input" rows="1" placeholder="Type a reply..."></textarea>
+          <button id="composer-send">Send</button>
+        </div>
+      </div>
+
+      <div class="bottom-nav">
+        <button id="nav-tickets" class="active">Tickets <span id="tickets-count" class="count hidden">0</span></button>
+        <button id="nav-chats">Chats</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
