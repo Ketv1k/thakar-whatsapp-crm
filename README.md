@@ -159,6 +159,24 @@ Choose any model with environment variables (no key = AI answers off):
 | `AI_API_KEY` | from console.anthropic.com | the provider's key |
 | `AI_BASE_URL` | leave empty | e.g. `https://api.openai.com/v1`, `https://generativelanguage.googleapis.com/v1beta/openai`, `https://api.deepseek.com/v1` |
 
+If a provider doesn't support OpenAI's JSON mode, the app asks again without it (the
+instructions already ask for JSON), so any OpenAI-compatible provider works.
+
+**What it costs.** Each answer sends about 3,500 tokens (the knowledge file plus ~47 products) and
+gets about 200 back. Approximate cost per answer, prices as of September 2026:
+
+| Model | Settings | Price per million tokens (in / out) | Per answer |
+|---|---|---|---|
+| Gemini 3.1 Flash-Lite | `openai`, `gemini-3.1-flash-lite`, Gemini base URL | $0.25 / $1.50 | ≈ ₹0.10 |
+| DeepSeek Flash | `openai`, `deepseek-flash`, DeepSeek base URL | $0.30 / $1.20 (half off-peak) | ≈ ₹0.05–0.11 |
+| Claude Haiku 4.5 | `anthropic`, `claude-haiku-4-5` | $1 / $5 | ≈ ₹0.40 |
+| Claude Sonnet 5 | `anthropic`, `claude-sonnet-5` | $2 / $10 | ≈ ₹1 |
+| Claude Opus 5 | `anthropic`, `claude-opus-5` | $5 / $25 | ≈ ₹2.50 |
+
+Customer messages are personal data: use a paid (billing-enabled) account, since free tiers may
+use prompts to improve the provider's models. Jev (TypeSafe) can't be used here - it classifies
+and scores but can't write text.
+
 ## Test mode (try it before WhatsApp is connected)
 
 Set `TEST_MODE=true` and:

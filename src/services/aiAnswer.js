@@ -168,22 +168,32 @@ async function askClaude(c, system, user) {
 }
 
 async function askOpenAiCompatible(c, system, user) {
-  const { data } = await axios.post(
-    `${c.baseUrl}/chat/completions`,
-    {
-      model: c.model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      response_format: { type: 'json_object' },
-    },
-    {
+  const body = {
+    model: c.model,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    response_format: { type: 'json_object' },
+  };
+  const send = (b) =>
+    axios.post(`${c.baseUrl}/chat/completions`, b, {
       headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json' },
       timeout: 30 * 1000,
-    }
-  );
-  return data?.choices?.[0]?.message?.content || '';
+    });
+  let res;
+  try {
+    res = await send(body);
+  } catch (err) {
+    // Not every provider or model supports JSON mode. The instructions already
+    // ask for JSON and parseAnswer tolerates text around it, so ask once more
+    // without it rather than giving up.
+    const status = err.response && err.response.status;
+    if (status !== 400 && status !== 422) throw err;
+    const { response_format: _dropped, ...plain } = body;
+    res = await send(plain);
+  }
+  return res.data?.choices?.[0]?.message?.content || '';
 }
 
 // Tolerates code fences or stray text around the JSON object.

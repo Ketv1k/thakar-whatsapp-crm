@@ -15,9 +15,12 @@ before(async () => {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
-      requests.push({ method: req.method, url: req.url, headers: req.headers, body: body ? JSON.parse(body) : null });
-      res.writeHead(nextResponse.status, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(nextResponse.body));
+      const record = { method: req.method, url: req.url, headers: req.headers, body: body ? JSON.parse(body) : null };
+      requests.push(record);
+      // A test can queue a fixed reply, or a function that answers per request.
+      const reply = typeof nextResponse === 'function' ? nextResponse(record) : nextResponse;
+      res.writeHead(reply.status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(reply.body));
     });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -117,6 +120,32 @@ test('OpenAI-compatible providers (OpenAI, Gemini, DeepSeek...) work the same wa
   assert.equal(req.body.model, 'my-model');
   assert.equal(req.body.messages[0].role, 'system');
   assert.deepEqual(req.body.response_format, { type: 'json_object' });
+});
+
+test('a provider without JSON mode (400) is asked again without it', async () => {
+  process.env.AI_PROVIDER = 'openai';
+  process.env.AI_API_KEY = 'sk-test';
+  process.env.AI_MODEL = 'gemini-3.1-flash-lite';
+  process.env.AI_BASE_URL = `${baseUrl}/v1beta/openai`;
+  nextResponse = (req) =>
+    req.body.response_format
+      ? { status: 400, body: { error: { message: 'response_format json_object is not supported' } } }
+      : { status: 200, body: { choices: [{ message: { content: 'Sure! {"answered": true, "reply": "Free delivery above ₹699."}' } }] } };
+  const result = await ai.answer('Free delivery kitna order pe?');
+  assert.deepEqual(result, { answered: true, reply: 'Free delivery above ₹699.' });
+  assert.equal(requests.length, 2);
+  assert.ok(requests[0].body.response_format);
+  assert.equal(requests[1].body.response_format, undefined);
+});
+
+test('other provider errors are not retried', async () => {
+  process.env.AI_PROVIDER = 'openai';
+  process.env.AI_API_KEY = 'sk-bad';
+  process.env.AI_MODEL = 'm';
+  process.env.AI_BASE_URL = `${baseUrl}/v1`;
+  nextResponse = { status: 401, body: { error: { message: 'bad key' } } };
+  assert.equal(await ai.answer('hello?'), null);
+  assert.equal(requests.length, 1);
 });
 
 test('answers are validated before anything is sent', () => {
