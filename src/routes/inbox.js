@@ -5,6 +5,9 @@ const Message = require('../models/Message');
 const Ticket = require('../models/Ticket');
 const whatsapp = require('../services/whatsapp');
 const inboxView = require('../services/inboxView');
+const shopify = require('../services/shopify');
+const cartLinks = require('../services/cartLinks');
+const { formatMoney } = require('../utils/money');
 const { replyAsFounder } = require('../services/founderReply');
 const { asyncHandler } = require('../utils/asyncHandler');
 const aiAnswer = require('../services/aiAnswer');
@@ -57,6 +60,53 @@ router.post('/conversations/:id/reply', asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(req.params.id);
   if (!conversation) return res.status(404).json({ error: 'conversation not found' });
   res.json(await replyAsFounder({ conversation, body: req.body.body }));
+}));
+
+// Builds a cart from the products the founder picked and sends the customer
+// a link that opens it on the shop's cart page, ready for address and
+// payment (Magic Checkout). Inside the 24-hour reply window, like any reply.
+router.post('/conversations/:id/cart-link', asyncHandler(async (req, res) => {
+  const conversation = await Conversation.findById(req.params.id);
+  if (!conversation) return res.status(404).json({ error: 'conversation not found' });
+  const norm = cartLinks.normalizeItems(req.body.items);
+  if (norm.error) return res.status(400).json({ error: norm.error });
+  if (!shopify.isConfigured()) return res.status(409).json({ error: "Shopify isn't connected, so carts can't be built" });
+
+  let variants;
+  try {
+    variants = await shopify.variantsByIds(norm.items.map((i) => i.variantId));
+  } catch (err) {
+    console.error('[cart-link] product check failed', err.message);
+    return res.status(502).json({ error: "Couldn't reach Shopify to check the products. Try again in a minute." });
+  }
+  const byId = new Map(variants.map((v) => [v.id, v]));
+  const lines = [];
+  for (const item of norm.items) {
+    const v = byId.get(item.variantId);
+    const name = v ? (v.title ? `${v.productTitle} (${v.title})` : v.productTitle) : 'A product';
+    if (!v || !v.active) return res.status(400).json({ error: `${name} is no longer on sale` });
+    if (!v.available) return res.status(400).json({ error: `${name} is sold out` });
+    lines.push({ productTitle: v.productTitle, variantTitle: v.title, price: v.price, quantity: item.quantity });
+  }
+
+  const cartId = cartLinks.newCartId();
+  const url = cartLinks.buildCartUrl(shopify.storeUrl(), norm.items, cartId);
+  const { text, total } = cartLinks.cartMessage(lines, url);
+  const message = await replyAsFounder({
+    conversation,
+    body: text,
+    preview: `🛒 Cart link · ${formatMoney(total)}`,
+    extra: {
+      cart: {
+        id: cartId,
+        url,
+        total,
+        currency: 'INR',
+        items: lines.map((l) => ({ title: l.variantTitle ? `${l.productTitle} (${l.variantTitle})` : l.productTitle, quantity: l.quantity, price: l.price })),
+      },
+    },
+  });
+  res.json(message);
 }));
 
 // Manual safety net: turn any chat into a ticket, in case the keyword triage

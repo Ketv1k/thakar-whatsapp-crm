@@ -11,10 +11,11 @@ function testFlag() {
   return whatsapp.testMode() ? true : undefined;
 }
 
-async function sendText({ conversationId, to, body, ticketId = null, autoAck = null, sentByFounder = false }) {
+async function sendText({ conversationId, to, body, ticketId = null, autoAck = null, sentByFounder = false, extra = {} }) {
   const result = await whatsapp.sendTextMessage(to, body);
   const waMessageId = result?.messages?.[0]?.id || null;
   return Message.create({
+    ...extra,
     conversationId,
     ticketId,
     direction: 'outbound',

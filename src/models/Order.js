@@ -45,6 +45,8 @@ const orderSchema = new mongoose.Schema(
     tags: [String],
     isCod: { type: Boolean, default: false, index: true },
     statusPageUrl: String,
+    // Set when the order came from a cart link sent in a chat (services/cartLinks.js).
+    waCartId: { type: String, default: null, index: true },
     items: [itemSchema],
     fulfillments: [fulfillmentSchema],
     shippedAt: { type: Date, default: null },

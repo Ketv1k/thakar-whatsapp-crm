@@ -10,6 +10,7 @@ const Order = require('../models/Order');
 const Customer = require('../models/Customer');
 const AbandonedCheckout = require('../models/AbandonedCheckout');
 const shopify = require('./shopify');
+const cartLinks = require('./cartLinks');
 const settings = require('./settings');
 const automations = require('./automations');
 const templates = require('./templates');
@@ -27,6 +28,7 @@ const MAX_PAGES_PER_RUN = 40;
 const ORDER_FIELDS = `
   id name createdAt updatedAt cancelledAt test
   displayFinancialStatus displayFulfillmentStatus paymentGatewayNames tags statusPageUrl
+  customAttributes { key value }
   currentTotalPriceSet { shopMoney { amount currencyCode } }
   totalOutstandingSet { shopMoney { amount } }
   phone
@@ -88,6 +90,7 @@ function mapOrder(node) {
     tags,
     isCod: gateways.some((g) => COD_GATEWAY.test(g)) || tags.some((t) => COD_GATEWAY.test(t)),
     statusPageUrl: node.statusPageUrl || null,
+    waCartId: cartLinks.cartIdOf(node.customAttributes),
     items: (node.lineItems?.edges || []).map((e) => ({
       title: e.node.title,
       quantity: e.node.quantity,

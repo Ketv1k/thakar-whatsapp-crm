@@ -86,8 +86,10 @@
             </header>
             <div class="thread-strip" id="thread-strip"></div>
             <div class="messages" id="messages" aria-live="polite"></div>
+            <div class="cart-builder hidden" id="cart-builder" role="region" aria-label="Build a cart"></div>
             <div class="quick-replies" id="quick-replies"></div>
             <div class="composer" id="composer">
+              <button id="cart-btn" class="icon-btn cart-btn" type="button" aria-label="Build a cart for this customer" aria-expanded="false" aria-controls="cart-builder" title="Build a cart"><span class="ico" data-icon="cart"></span></button>
               <textarea id="composer-input" rows="1" placeholder="Type a reply" aria-label="Type a reply"></textarea>
               <button id="composer-send" class="send-btn" type="button" aria-label="Send"><span class="ico" data-icon="send"></span></button>
             </div>

@@ -29,6 +29,7 @@ src/
     segments.js         Customer groups (VIP, lapsed, opted in...)
     campaigns.js        Broadcasts: audience, cost, sending, results
     cartRecovery.js     Abandoned-cart reminders
+    cartLinks.js        Carts built in a chat: the link, the message, and matching orders back to it
     reorder.js          Reorder reminders
     backInStock.js      Back-in-stock alerts
     optIn.js            STOP / START and marketing opt-in
@@ -37,7 +38,7 @@ src/
     ticketTriage.js     The keyword logic that decides: auto-answer / create ticket / leave as general chat
   routes/
     webhook.js          Receives WhatsApp messages, button taps and delivery ticks; runs triage
-    inbox.js             Home dashboard, the one inbox, replies, media, "flag as ticket" escape hatch
+    inbox.js             Home dashboard, the one inbox, replies, cart links, media, "flag as ticket" escape hatch
     tickets.js            Ticket list + reply + resolve
     customers.js          Customer directory, groups, profiles, bulk opt-in
     automations.js        Automation switches, stats, "check now"
@@ -230,6 +231,16 @@ Starter and remove `TEST_MODE` when going live with WhatsApp.
 - **Reply window** — WhatsApp only allows free-form replies for 24 hours after the customer's
   last message. Every chat shows how long is left; once it closes the reply box explains why
   it's locked instead of failing.
+- **Cart links** — the cart button next to the reply box builds a cart for the customer: search
+  a product, tap a size, set quantities, **Send cart link**. They get the list with prices and
+  one link that opens the shop's cart page with exactly those items; **Proceed to Checkout**
+  there opens Razorpay Magic Checkout for their address and payment. Sold-out sizes and
+  products that aren't on the website can't be added. The link's UTM tags
+  (`utm_source=whatsapp&utm_medium=chat&utm_campaign=cart_link&utm_content=<cart id>`) are
+  saved on the cart by Magic Checkout and copied onto the order, so the chat shows
+  **Ordered · #3451** under the link once they buy (failing that, their first order within 3
+  days of the link counts). Sales from these links also show as `whatsapp / chat` in Razorpay's
+  reports. Like any reply, it needs the 24-hour window to be open.
 - On a computer the list, chat and customer sit side by side (like WhatsApp Web); on a phone
   it's one screen at a time with tabs at the bottom. `FOUNDER_NAME` sets the name in the
   greeting.

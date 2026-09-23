@@ -116,7 +116,7 @@ async function addOrderTags(shopifyGid, tags) {
 
 const PRODUCT_FIELDS = `
   id title handle onlineStoreUrl status tracksInventory totalInventory
-  variants(first: 20) { edges { node { id title availableForSale } } }
+  variants(first: 20) { edges { node { id title availableForSale price } } }
 `;
 
 function mapProduct(p) {
@@ -124,12 +124,14 @@ function mapProduct(p) {
     id: e.node.id,
     title: e.node.title,
     available: !!e.node.availableForSale,
+    price: Number(e.node.price || 0),
   }));
   return {
     id: p.id,
     title: p.title,
     url: p.onlineStoreUrl || `${storeUrl()}/products/${p.handle}`,
     active: p.status === 'ACTIVE',
+    onStore: !!p.onlineStoreUrl,
     variants: variants.length === 1 && variants[0].title === 'Default Title' ? [{ ...variants[0], title: '' }] : variants,
     inStock: variants.length > 0 && variants.every((v) => v.available),
     soldOutVariants: variants.filter((v) => !v.available).map((v) => v.title),
@@ -144,6 +146,28 @@ async function searchProducts(text) {
     { q: q ? `${q} status:active` : 'status:active' }
   );
   return (data?.products?.edges || []).map((e) => mapProduct(e.node));
+}
+
+// Variants (sizes/packs) by id, with their product - for building carts.
+async function variantsByIds(ids) {
+  if (!ids.length) return [];
+  const data = await graphql(
+    `query Variants($ids: [ID!]!) { nodes(ids: $ids) { ... on ProductVariant {
+      id title price availableForSale product { title status onlineStoreUrl }
+    } } }`,
+    { ids }
+  );
+  return (data?.nodes || [])
+    .filter((n) => n && n.id)
+    .map((n) => ({
+      id: n.id,
+      title: n.title === 'Default Title' ? '' : n.title,
+      productTitle: n.product?.title || '',
+      // On sale on the website (a cart link can only hold those).
+      active: n.product?.status === 'ACTIVE' && !!n.product?.onlineStoreUrl,
+      available: !!n.availableForSale,
+      price: Number(n.price || 0),
+    }));
 }
 
 async function productsByIds(ids) {
@@ -351,6 +375,7 @@ module.exports = {
   addOrderTags,
   searchProducts,
   productsByIds,
+  variantsByIds,
   mapProduct,
   getLatestOrderStatusByPhone,
   getCustomerSummaryByPhone,

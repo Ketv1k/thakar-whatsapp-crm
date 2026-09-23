@@ -44,6 +44,20 @@ const messageSchema = new mongoose.Schema(
     buttons: { type: [String], default: undefined },
     // Saved while TEST_MODE was on: logged, never actually sent.
     test: { type: Boolean, default: undefined },
+    // A cart the founder built in the chat (services/cartLinks.js).
+    cart: {
+      type: new mongoose.Schema(
+        {
+          id: String,
+          url: String,
+          total: Number,
+          currency: String,
+          items: [{ _id: false, title: String, quantity: Number, price: Number }],
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

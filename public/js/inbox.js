@@ -2,7 +2,7 @@
 // panel. On a computer the three sit side by side; on a phone it's one
 // screen at a time.
 import {
-  state, api, post, el, escapeHtml, formatPhone, displayName, avatar, ago, listTime, dayLabel, clock, toast,
+  state, api, post, el, escapeHtml, formatPhone, displayName, avatar, ago, listTime, dayLabel, clock, toast, money,
   icon, ISSUE_LABELS, ISSUE_TYPES, AUTO_LABELS, tickHtml, setInboxCount,
 } from './core.js';
 import { renderProfile, loadProfile } from './profile.js';
@@ -123,6 +123,7 @@ export async function openThread(id) {
     el('messages').innerHTML = '<div class="empty">Loading…</div>';
     el('customer-body').innerHTML = '<div class="empty">Loading…</div>';
     el('composer-input').value = '';
+    resetCart();
     renderChatList();
   }
   let data;
@@ -135,7 +136,7 @@ export async function openThread(id) {
   if (mine !== threadRequest || !thread || thread.id !== id) return;
   // Only redraw messages when something changed (a new message or a tick),
   // so a playing voice note or the scroll position isn't disturbed.
-  const sig = (list) => list.map((m) => `${m._id}:${m.status || ''}`).join('|');
+  const sig = (list) => list.map((m) => `${m._id}:${m.status || ''}:${(m.cart && m.cart.order && m.cart.order.name) || ''}`).join('|');
   const messagesChanged = changed || sig(thread.messages) !== sig(data.messages);
   thread.conversation = data.conversation;
   thread.messages = data.messages;
@@ -152,6 +153,7 @@ export function closeThread() {
   thread = null;
   profile = null;
   threadRequest++;
+  resetCart();
   el('thread').classList.add('hidden');
   el('thread-empty').classList.remove('hidden');
   el('customer-body').innerHTML = '<div class="empty">Pick a chat to see who it is.</div>';
@@ -276,9 +278,29 @@ function renderMessages(scrollToEnd) {
   if (scrollToEnd || nearBottom) box.scrollTop = box.scrollHeight;
 }
 
+// Web links in a message become tappable (http and https only), long ones
+// shortened for display. Works on already-escaped text, so it stops at
+// escaped quotes and brackets.
+function linkify(escaped) {
+  return escaped.replace(/https?:\/\/(?:(?!&lt;|&gt;|&quot;|&#39;)[^\s<>"'])+/g, (url) => {
+    const tail = (url.match(/[.,;:!?)\]]+$/) || [''])[0];
+    const href = tail ? url.slice(0, -tail.length) : url;
+    const bare = href.replace(/^https?:\/\//, '');
+    const text = bare.length > 48 ? `${bare.slice(0, 45).replace(/&[a-z0-9#]*$/i, '')}…` : bare;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer" title="${href}">${text}</a>${tail}`;
+  });
+}
+
+// Under a cart link: whether the customer has ordered since.
+function cartStatusHtml(c) {
+  if (!c.order) return '<div class="cart-status"><span class="pill">Not ordered yet</span></div>';
+  const how = c.order.exact ? 'Placed from this cart link' : 'Placed within 3 days of this cart link';
+  return `<div class="cart-status"><span class="pill pill-green" title="${how}">${icon('check')}Ordered · ${escapeHtml(c.order.name)}</span></div>`;
+}
+
 function messageHtml(m) {
   const out = m.direction === 'outbound';
-  const label = out && m.autoAck ? AUTO_LABELS[m.autoAck] || 'Auto-reply' : '';
+  const label = out && m.autoAck ? AUTO_LABELS[m.autoAck] || 'Auto-reply' : out && m.cart ? 'Cart link' : '';
   const hasMedia = !!m.media;
   const caption = hasMedia ? (/^\[(photo|audio|video|document|sticker)\]$/.test(m.body) ? '' : m.body) : m.body;
   const failed = m.status === 'failed'
@@ -292,7 +314,8 @@ function messageHtml(m) {
     <div class="bubble ${out ? 'out' : 'in'}${hasMedia ? ' media' : ''}${m.type === 'template' ? ' template' : ''}">
       ${label ? `<span class="auto-label">${escapeHtml(label)}</span>` : tapped}
       ${hasMedia ? mediaHtml(m) : ''}
-      ${caption ? `<div class="caption">${escapeHtml(caption)}</div>` : ''}
+      ${caption ? `<div class="caption">${linkify(escapeHtml(caption))}</div>` : ''}
+      ${out && m.cart ? cartStatusHtml(m.cart) : ''}
       <div class="meta">${escapeHtml(clock(m.createdAt))}${out ? tickHtml(m.status === 'failed' ? null : m.status, m.test) : ''}</div>
       ${failed}
       ${buttons}
@@ -443,7 +466,7 @@ function closeLightbox() {
 function renderComposer() {
   const w = windowState(thread.conversation);
   el('composer').classList.toggle('hidden', !w.open);
-  el('quick-replies').classList.toggle('hidden', !w.open);
+  syncCartVisibility();
   const closed = el('composer-closed');
   closed.classList.toggle('hidden', w.open);
   if (!w.open) {
@@ -496,6 +519,232 @@ async function sendReply() {
   }
 }
 
+// ---------- Cart builder ----------
+// The founder picks products and quantities; the customer gets a message
+// with the list and one link that opens the shop's cart with those items,
+// ready for address and payment (Magic Checkout). Kept as a draft until
+// it's sent or another chat is opened.
+const CART_MAX_LINES = 20;
+const CART_MAX_QTY = 50;
+let cart = { open: false, lines: [], sending: false };
+
+function resetCart() {
+  cart = { open: false, lines: [], sending: false };
+  el('cart-builder').innerHTML = '';
+  syncCartVisibility();
+}
+
+function lineName(l) {
+  return l.variantTitle ? `${l.productTitle} (${l.variantTitle})` : l.productTitle;
+}
+
+// The builder shows only while the reply window is open; quick replies make
+// way for it.
+function syncCartVisibility() {
+  const open = !!(thread && thread.conversation && windowState(thread.conversation).open);
+  const show = cart.open && open;
+  el('cart-builder').classList.toggle('hidden', !show);
+  el('quick-replies').classList.toggle('hidden', !open || show);
+  const btn = el('cart-btn');
+  btn.setAttribute('aria-expanded', String(show));
+  btn.classList.toggle('active', show);
+}
+
+// Keeps the newest message in view when the builder opens or closes.
+function keepMessagesInView(change) {
+  const box = el('messages');
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  change();
+  if (nearBottom) box.scrollTop = box.scrollHeight;
+}
+
+function openCart() {
+  if (!thread || !thread.conversation) return;
+  const c = thread.conversation;
+  const first = (c.customerName || '').trim().split(/\s+/)[0];
+  const box = el('cart-builder');
+  box.innerHTML = `
+    <div class="cart-head">
+      <span class="ico">${icon('cart')}</span>
+      <b class="grow">Cart for ${escapeHtml(first || displayName(c))}</b>
+      <button type="button" class="icon-btn" data-cart-close aria-label="Close the cart"><span class="ico">${icon('close')}</span></button>
+    </div>
+    <label class="search small"><span class="ico">${icon('search')}</span><input type="search" placeholder="Find a product, e.g. methi papad" aria-label="Find a product" autocomplete="off" data-cart-q /></label>
+    <div class="cart-scroll">
+      <div class="product-results" data-cart-results></div>
+      <div class="cart-lines" data-cart-lines></div>
+    </div>
+    <div class="cart-foot">
+      <span class="cart-total" data-cart-total></span>
+      <button type="button" class="btn btn-primary" data-cart-send>Send cart link</button>
+    </div>`;
+  box.querySelector('[data-cart-close]').addEventListener('click', () => closeCart());
+  box.querySelector('[data-cart-send]').addEventListener('click', sendCart);
+  box.addEventListener('keydown', onCartKey);
+  wireCartSearch(box);
+  cart.open = true;
+  keepMessagesInView(syncCartVisibility);
+  renderCartLines();
+  box.querySelector('[data-cart-q]').focus();
+}
+
+function closeCart() {
+  cart.open = false;
+  const box = el('cart-builder');
+  box.removeEventListener('keydown', onCartKey);
+  keepMessagesInView(() => {
+    box.innerHTML = '';
+    syncCartVisibility();
+  });
+}
+
+function onCartKey(e) {
+  if (e.key !== 'Escape') return;
+  closeCart();
+  el('cart-btn').focus();
+}
+
+function wireCartSearch(box) {
+  const input = box.querySelector('[data-cart-q]');
+  const results = box.querySelector('[data-cart-results]');
+  let timer = null;
+  let seq = 0;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    seq++;
+    if (q.length < 2) {
+      results.innerHTML = '';
+      return;
+    }
+    timer = setTimeout(async () => {
+      const mine = ++seq;
+      results.innerHTML = '<div class="muted">Searching…</div>';
+      try {
+        const products = await api(`/api/products?q=${encodeURIComponent(q)}`);
+        if (mine !== seq) return;
+        renderCartResults(input, results, products);
+      } catch (err) {
+        if (mine === seq) results.innerHTML = `<div class="muted">${escapeHtml(err.message)}</div>`;
+      }
+    }, 300);
+  });
+}
+
+function renderCartResults(input, results, products) {
+  if (!products.length) {
+    results.innerHTML = '<div class="muted">No products found. Try another word.</div>';
+    return;
+  }
+  results.innerHTML = products
+    .map((p, pi) => {
+      const chips = p.variants
+        .map((v, vi) => {
+          const why = p.onStore === false ? 'not on the website' : !v.available ? 'sold out' : '';
+          return `<button type="button" class="chip-btn${why ? ' sold-out' : ''}" data-p="${pi}" data-v="${vi}"${why ? ' disabled' : ''}>${escapeHtml(v.title || 'Add')} · ${escapeHtml(money(v.price))}${why ? ` · ${why}` : ''}</button>`;
+        })
+        .join('');
+      return `<div class="product-row"><b>${escapeHtml(p.title)}</b><div class="product-options">${chips}</div></div>`;
+    })
+    .join('');
+  for (const b of results.querySelectorAll('[data-p]')) {
+    b.addEventListener('click', () => {
+      const p = products[b.dataset.p];
+      if (!addCartLine(p, p.variants[b.dataset.v])) return;
+      input.value = '';
+      results.innerHTML = '';
+      // Ready for the next product on a computer; on a phone the keyboard
+      // would hide the cart.
+      if (window.matchMedia('(min-width: 900px)').matches) input.focus();
+      else input.blur();
+    });
+  }
+}
+
+function addCartLine(p, v) {
+  const line = cart.lines.find((l) => l.variantId === v.id);
+  if (line) {
+    line.quantity = Math.min(CART_MAX_QTY, line.quantity + 1);
+  } else {
+    if (cart.lines.length >= CART_MAX_LINES) {
+      toast(`At most ${CART_MAX_LINES} different products in one cart`);
+      return false;
+    }
+    cart.lines.push({ variantId: v.id, productTitle: p.title, variantTitle: v.title, price: v.price, quantity: 1 });
+  }
+  renderCartLines();
+  return true;
+}
+
+function renderCartLines() {
+  const box = el('cart-builder');
+  const list = box.querySelector('[data-cart-lines]');
+  if (!list) return;
+  list.innerHTML = cart.lines.length
+    ? cart.lines
+        .map((l, i) => {
+          const name = escapeHtml(lineName(l));
+          return `
+          <div class="cart-line">
+            <span class="cart-line-name">${escapeHtml(l.productTitle)}<small>${l.variantTitle ? `${escapeHtml(l.variantTitle)} · ` : ''}${escapeHtml(money(l.price))} each</small></span>
+            <span class="qty">
+              <button type="button" class="qty-btn" data-dec="${i}" aria-label="${l.quantity > 1 ? `One less ${name}` : `Remove ${name}`}">${icon('minus')}</button>
+              <span class="qty-n" aria-label="Quantity">${l.quantity}</span>
+              <button type="button" class="qty-btn" data-inc="${i}" aria-label="One more ${name}"${l.quantity >= CART_MAX_QTY ? ' disabled' : ''}>${icon('plus')}</button>
+            </span>
+            <span class="cart-line-total">${escapeHtml(money(l.price * l.quantity))}</span>
+            <button type="button" class="icon-btn line-remove" data-remove="${i}" aria-label="Remove ${name}"><span class="ico">${icon('close')}</span></button>
+          </div>`;
+        })
+        .join('')
+    : '<div class="cart-empty">Search for a product and tap a size to add it. Add as many products as you like.</div>';
+  const change = (i, by) => {
+    const l = cart.lines[i];
+    l.quantity = Math.min(CART_MAX_QTY, l.quantity + by);
+    if (l.quantity < 1) cart.lines.splice(i, 1);
+    renderCartLines();
+  };
+  for (const b of list.querySelectorAll('[data-dec]')) b.addEventListener('click', () => change(Number(b.dataset.dec), -1));
+  for (const b of list.querySelectorAll('[data-inc]')) b.addEventListener('click', () => change(Number(b.dataset.inc), 1));
+  for (const b of list.querySelectorAll('[data-remove]')) {
+    b.addEventListener('click', () => {
+      cart.lines.splice(Number(b.dataset.remove), 1);
+      renderCartLines();
+    });
+  }
+  const total = cart.lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
+  const items = cart.lines.reduce((sum, l) => sum + l.quantity, 0);
+  box.querySelector('[data-cart-total]').innerHTML = cart.lines.length
+    ? `${items} ${items === 1 ? 'item' : 'items'} · <b>${escapeHtml(money(total))}</b>`
+    : '';
+  const send = box.querySelector('[data-cart-send]');
+  send.disabled = !cart.lines.length || cart.sending;
+  send.textContent = cart.sending ? 'Sending…' : 'Send cart link';
+}
+
+async function sendCart() {
+  if (!thread || cart.sending || !cart.lines.length) return;
+  const forId = thread.id;
+  cart.sending = true;
+  renderCartLines();
+  try {
+    const message = await post(`/api/conversations/${forId}/cart-link`, {
+      items: cart.lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
+    });
+    if (!thread || thread.id !== forId) return;
+    resetCart();
+    thread.messages.push(message);
+    renderMessages(true);
+    openThread(thread.id);
+    loadInbox();
+  } catch (err) {
+    toast(`Not sent: ${err.message}`);
+  } finally {
+    cart.sending = false;
+    renderCartLines();
+  }
+}
+
 // ---------- Wiring (once) ----------
 export function initInbox() {
   for (const b of el('filter-chips').querySelectorAll('button')) {
@@ -534,6 +783,7 @@ export function initInbox() {
     }
   });
   el('composer-send').addEventListener('click', sendReply);
+  el('cart-btn').addEventListener('click', () => (cart.open ? closeCart() : openCart()));
 }
 
 // Called by the router when the inbox is shown.
@@ -548,7 +798,7 @@ export function showInbox(route, prev) {
 export function refreshInbox() {
   loadInbox();
   const active = document.activeElement;
-  const editing = active && (active.matches('[data-note]') || active.classList.contains('tag-input') || active.matches('[data-product-q]'));
+  const editing = active && (active.matches('[data-note]') || active.classList.contains('tag-input') || active.matches('[data-product-q], [data-cart-q]'));
   if (thread && !editing) openThread(thread.id);
 }
 

@@ -9,6 +9,7 @@ const Order = require('../models/Order');
 const Campaign = require('../models/Campaign');
 const replyWindow = require('./replyWindow');
 const autoAck = require('./autoAck');
+const cartLinks = require('./cartLinks');
 const { startOfTodayIndia } = require('../utils/time');
 
 const FILTERS = ['all', 'needs_reply', 'tickets'];
@@ -152,7 +153,26 @@ async function getConversation(id) {
   for (const m of messages) {
     if (m.media) m.media = { mimeType: m.media.mimeType || '', filename: m.media.filename || '', voice: !!m.media.voice };
   }
+  await attachCartOrders(conversation.customerPhone, messages);
   return { conversation: item, messages };
+}
+
+// For cart links sent in the chat: the order that came from each one
+// (see cartLinks.matchOrders).
+async function attachCartOrders(phone, messages) {
+  const carts = messages.filter((m) => m.cart && m.cart.id);
+  if (!carts.length) return;
+  const orders = await Order.find({
+    cancelledAt: null,
+    $or: [{ waCartId: { $in: carts.map((m) => m.cart.id) } }, { phone, placedAt: { $gte: new Date(carts[0].createdAt) } }],
+  })
+    .select('name placedAt total waCartId')
+    .lean();
+  cartLinks.matchOrders(carts, orders).forEach((match, i) => {
+    if (!match) return;
+    const o = match.order;
+    carts[i].cart.order = { name: o.name, placedAt: o.placedAt, total: o.total, exact: match.exact };
+  });
 }
 
 const ORDER_UPDATE_KINDS = ['order_confirmed', 'cod_request', 'order_shipped', 'out_for_delivery', 'order_delivered'];
