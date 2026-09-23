@@ -38,8 +38,21 @@ const ISSUE_KEYWORD_GROUPS = [
     keywords: ['missing', 'not received', "didn't receive", 'did not receive', 'item missing', 'short delivery'],
   },
   {
+    type: 'payment',
+    keywords: ['money deducted', 'amount deducted', 'amount debited', 'money debited', 'payment failed',
+      'charged twice', 'double charged', 'paid but', 'payment done but', 'paisa kat gaya', 'paise kat gaye'],
+  },
+  {
     type: 'refund_request',
     keywords: ['refund', 'replace my order', 'return this', 'compensation', 'complaint'],
+  },
+  {
+    // Unhappy about the food itself. Phrases rather than bare "bad", so
+    // "not bad!" doesn't open a ticket.
+    type: 'quality',
+    keywords: ['bad taste', 'tasted bad', 'tastes bad', 'taste was bad', 'taste is bad', 'stale',
+      'not fresh', 'worst', 'disappointed', 'disappointing', 'poor quality', 'not happy', 'horrible',
+      'terrible', 'pathetic', 'kharab', 'bekar', 'bakwas'],
   },
   {
     type: 'delay',
@@ -91,6 +104,8 @@ function acknowledgmentMessage(ticketNumber, issueType) {
   let msg = `Thanks for letting us know — we've logged this as ticket #${ticketNumber} and our team will follow up shortly.`;
   if (shouldRequestPhoto(issueType)) {
     msg += ' If you can, please reply with a photo of the item — it helps us sort this out faster.';
+  } else if (issueType === 'payment') {
+    msg += ' If you can, please share the UPI / transaction reference number — it helps us check this faster.';
   }
   return msg;
 }

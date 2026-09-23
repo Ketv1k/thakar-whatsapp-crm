@@ -27,9 +27,15 @@ public/                 Founder Inbox - mobile-first PWA (installable, "Add to H
 
 1. Customer messages in on WhatsApp.
 2. If it's a plain "where's my order" question → auto-answered from Shopify. No ticket, no work for you.
-3. If it's a real issue (damaged, wrong item, missing, delay complaint, refund ask) → pulled into a
-   **ticket**, separated from general chat, customer gets an instant acknowledgment with a ticket number.
-4. Anything else → sits in the normal Chats tab for you to answer.
+3. If it's a real issue (damaged, wrong item, missing, delay complaint, refund ask, food quality
+   complaint, payment problem) → pulled into a **ticket**, separated from general chat, customer gets an
+   instant acknowledgment with a ticket number (plus a photo or transaction-reference request where it helps).
+4. Anything else → the customer gets an instant acknowledgment that fits what they sent
+   (greeting, product question, bulk order, delivery area, compliment, photo, voice note, or a
+   general "we've received it"), and the message waits in the Chats tab for you. "ok"/"thanks",
+   emoji-only messages, reactions and stickers get no reply; the same kind of acknowledgment isn't
+   repeated within `ACK_COOLDOWN_HOURS`, and none are sent while you're talking to that customer.
+   Wording and keywords live in `src/services/autoAck.js`.
 5. A ticket unresolved for 6+ hours pings you directly on WhatsApp so nothing gets missed.
 6. You can also manually flag any chat as a ticket from the app, as a safety net for anything the
    keyword matching misses.

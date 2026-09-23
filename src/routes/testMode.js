@@ -62,8 +62,10 @@ router.post('/simulate', asyncHandler(async (req, res) => {
     outcome = 'added_to_ticket';
   } else if (ticket) {
     outcome = 'ticket_created';
-  } else if (replies.length) {
+  } else if (replies.some((r) => r.autoAck === 'order_status')) {
     outcome = 'auto_answered';
+  } else if (replies.length) {
+    outcome = 'acknowledged';
   }
 
   res.json({

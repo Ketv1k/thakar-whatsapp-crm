@@ -27,6 +27,20 @@ test('real issues map to the right ticket type', () => {
   assert.equal(triage.detectIssueType('this is still not delivered yet, too long'), 'delay');
 });
 
+test('food quality complaints become tickets, including Hinglish', () => {
+  assert.equal(triage.detectIssueType('The dal tasted bad and was not fresh'), 'quality');
+  assert.equal(triage.detectIssueType('khana kharab tha'), 'quality');
+  assert.equal(triage.detectIssueType('worst experience'), 'quality');
+  assert.equal(triage.detectIssueType('not bad at all!'), null);
+});
+
+test('payment problems become tickets and ask for the transaction reference', () => {
+  assert.equal(triage.detectIssueType("Money deducted but I didn't get a confirmation"), 'payment');
+  assert.equal(triage.detectIssueType('I was charged twice'), 'payment');
+  assert.match(triage.acknowledgmentMessage(1050, 'payment'), /transaction reference/);
+  assert.doesNotMatch(triage.acknowledgmentMessage(1050, 'payment'), /photo/);
+});
+
 test('refund/complaint language wins over a milder delay match', () => {
   assert.equal(
     triage.detectIssueType('still waiting and I want a refund'),

@@ -24,9 +24,11 @@ const ISSUE_LABELS = {
   wrong_item: 'Wrong item',
   missing: 'Missing item',
   refund_request: 'Refund request',
+  quality: 'Quality complaint',
+  payment: 'Payment issue',
   other: 'Other',
 };
-const ISSUE_TYPES = ['delay', 'damaged', 'wrong_item', 'missing', 'refund_request', 'other'];
+const ISSUE_TYPES = ['delay', 'damaged', 'wrong_item', 'missing', 'quality', 'payment', 'refund_request', 'other'];
 
 let apiKey = localStorage.getItem(API_KEY_STORAGE) || '';
 let currentTab = 'tickets'; // 'tickets' | 'chats'
@@ -470,7 +472,7 @@ function renderMessages(messages) {
     if (m.createdAt) {
       const time = document.createElement('div');
       time.className = 'bubble-time';
-      time.textContent = clockTime(m.createdAt);
+      time.textContent = (m.autoAck ? 'Auto-reply · ' : '') + clockTime(m.createdAt);
       wrap.appendChild(time);
     }
     threadMessages.appendChild(wrap);
@@ -600,7 +602,14 @@ const TEST_SAMPLES = [
   ['Wrong item', 'You sent me the wrong item'],
   ['Refund', 'I want a refund for my last order'],
   ['Late delivery', "It's been 5 days and my order is still not delivered yet"],
-  ['General question', 'Do you have Jain options without onion and garlic?'],
+  ['Bad taste', 'The dal tasted bad and was not fresh'],
+  ['Payment', "Money deducted but I didn't get any order confirmation"],
+  ['Hi', 'Hi'],
+  ['Question', 'Do you have Jain options without onion and garlic?'],
+  ['Bulk order', 'I want to place a bulk order for a family function'],
+  ['Delivery area', 'Do you deliver to Pune?'],
+  ['Compliment', 'Loved the food, thank you!'],
+  ['Ok thanks', 'ok thanks'],
 ];
 let testCustomers = null;
 
@@ -694,6 +703,7 @@ function renderTestResult(r) {
     auto_answered: 'Answered automatically from Shopify. No work for you.',
     ticket_created: `Ticket #${r.ticketNumber} created (${issue}). It's waiting in your Tickets tab.`,
     added_to_ticket: `Added to their open Ticket #${r.ticketNumber}.`,
+    acknowledged: 'Acknowledged automatically. It is waiting in your Chats for you to reply.',
     chat: 'Added to your Chats for you to reply.',
   }[r.outcome];
   const replies = r.replies.length

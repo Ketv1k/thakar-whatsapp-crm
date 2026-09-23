@@ -11,6 +11,9 @@ const messageSchema = new mongoose.Schema(
     mediaUrl: { type: String, default: null },
     waMessageId: { type: String, default: null },
     sentByFounder: { type: Boolean, default: false },
+    // Set on messages the app sent by itself: 'order_status', 'ticket', or an
+    // acknowledgment category from services/autoAck.js ('greeting', 'photo'...).
+    autoAck: { type: String, default: null },
   },
   { timestamps: true }
 );

@@ -7,7 +7,7 @@ const ticketSchema = new mongoose.Schema(
     customerPhone: { type: String, required: true, index: true },
     conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
     orderNumber: { type: String, default: null },
-    // 'delay' | 'damaged' | 'wrong_item' | 'missing' | 'refund_request' | 'other'
+    // 'delay' | 'damaged' | 'wrong_item' | 'missing' | 'payment' | 'refund_request' | 'quality' | 'other'
     issueType: { type: String, required: true },
     // 'open' -> founder hasn't replied yet
     // 'founder_replied' -> founder has responded, waiting on customer / closing

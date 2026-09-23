@@ -6,6 +6,7 @@ const Ticket = require('../models/Ticket');
 const whatsapp = require('../services/whatsapp');
 const shopify = require('../services/shopify');
 const triage = require('../services/ticketTriage');
+const autoAck = require('../services/autoAck');
 
 const router = express.Router();
 
@@ -78,9 +79,8 @@ async function handleIncomingMessage(waMessage, value) {
   // 2. Save the inbound message. If a concurrent retry beat us to it, the
   //    unique waMessageId index throws a duplicate-key error - treat that as
   //    "already handled" and stop, before any reply or ticket is created.
-  let inboundMessage;
   try {
-    inboundMessage = await Message.create({
+    await Message.create({
       conversationId: conversation._id,
       ticketId: conversation.activeTicketId || null,
       direction: 'inbound',
@@ -105,9 +105,11 @@ async function handleIncomingMessage(waMessage, value) {
     return;
   }
 
-  // 4. No open ticket - run triage on plain text messages only.
+  // 4. No open ticket - run triage on plain text messages only. Photos, voice
+  //    notes etc. get an instant acknowledgment and wait in Chats.
   if (waMessage.type !== 'text') {
     await conversation.save();
+    await sendAutoAckIfDue(conversation, fromPhone, autoAck.categorize(waMessage.type, text));
     return;
   }
 
@@ -122,6 +124,7 @@ async function handleIncomingMessage(waMessage, value) {
         direction: 'outbound',
         type: 'text',
         body: replyText,
+        autoAck: 'order_status',
       });
       // Already answered - show the reply as the latest message and don't flag
       // the chat as needing the founder.
@@ -131,7 +134,7 @@ async function handleIncomingMessage(waMessage, value) {
       console.error('[webhook] shopify status lookup failed', err.message);
       // Fail safe: don't leave the customer hanging - fall through to a ticket
       // so a human sees it instead of silently dropping the question.
-      await createTicketForConversation({ conversation, fromPhone, issueType: 'other', inboundMessage });
+      await createTicketForConversation({ conversation, fromPhone, issueType: 'other' });
     }
     await conversation.save();
     return;
@@ -140,16 +143,41 @@ async function handleIncomingMessage(waMessage, value) {
   const issueType = triage.detectIssueType(text);
   if (issueType) {
     // Tier 2: real issue, becomes a ticket.
-    await createTicketForConversation({ conversation, fromPhone, issueType, inboundMessage });
+    await createTicketForConversation({ conversation, fromPhone, issueType });
     await conversation.save();
     return;
   }
 
-  // Tier 3: general message, left in the normal inbox for you to answer.
+  // Tier 3: general message - an instant acknowledgment that fits what they
+  // said, then it waits in Chats for the founder to answer.
   await conversation.save();
+  await sendAutoAckIfDue(conversation, fromPhone, autoAck.categorize('text', text));
 }
 
-async function createTicketForConversation({ conversation, fromPhone, issueType, inboundMessage }) {
+// Sends the acknowledgment unless it would be noise: none fits (e.g. "ok
+// thanks"), the founder is already talking to this customer, or the same kind
+// of acknowledgment went out recently.
+async function sendAutoAckIfDue(conversation, fromPhone, category) {
+  if (!category) return;
+  const since = new Date(Date.now() - autoAck.cooldownHours() * 60 * 60 * 1000);
+  const [founderActive, alreadySent] = await Promise.all([
+    Message.exists({ conversationId: conversation._id, sentByFounder: true, createdAt: { $gte: since } }),
+    Message.exists({ conversationId: conversation._id, autoAck: category, createdAt: { $gte: since } }),
+  ]);
+  if (founderActive || alreadySent) return;
+
+  const reply = autoAck.replyFor(category);
+  await whatsapp.sendTextMessage(fromPhone, reply);
+  await Message.create({
+    conversationId: conversation._id,
+    direction: 'outbound',
+    type: 'text',
+    body: reply,
+    autoAck: category,
+  });
+}
+
+async function createTicketForConversation({ conversation, fromPhone, issueType }) {
   const ticketNumber = await Ticket.nextTicketNumber();
   const ticket = await Ticket.create({
     ticketNumber,
@@ -161,8 +189,16 @@ async function createTicketForConversation({ conversation, fromPhone, issueType,
   });
 
   conversation.activeTicketId = ticket._id;
-  inboundMessage.ticketId = ticket._id;
-  await inboundMessage.save();
+  // Pull this message and the last day's un-ticketed messages into the ticket,
+  // so e.g. a photo sent just before describing the problem shows up with it.
+  await Message.updateMany(
+    {
+      conversationId: conversation._id,
+      ticketId: null,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    },
+    { ticketId: ticket._id }
+  );
 
   const ackText = triage.acknowledgmentMessage(ticketNumber, issueType);
   await whatsapp.sendTextMessage(fromPhone, ackText);
@@ -172,6 +208,7 @@ async function createTicketForConversation({ conversation, fromPhone, issueType,
     direction: 'outbound',
     type: 'text',
     body: ackText,
+    autoAck: 'ticket',
   });
 
   return ticket;
