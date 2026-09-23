@@ -222,6 +222,31 @@ async function listRecentCustomersWithPhone(limit = 15) {
     .slice(0, limit);
 }
 
+// Active products with prices and stock, for the AI auto-reply's knowledge.
+async function listProductsForKnowledge() {
+  const data = await graphql(
+    `query KnowledgeProducts {
+      products(first: 150, query: "status:active", sortKey: TITLE) {
+        edges {
+          node {
+            title
+            productType
+            description(truncateAt: 300)
+            variants(first: 10) { edges { node { title price availableForSale } } }
+          }
+        }
+      }
+    }`,
+    {}
+  );
+  return (data?.products?.edges || []).map(({ node }) => ({
+    title: node.title,
+    productType: node.productType,
+    description: node.description,
+    variants: (node.variants?.edges || []).map((e) => e.node),
+  }));
+}
+
 // Turns a lookup result into a short, friendly WhatsApp reply.
 function composeStatusReplyText(orderInfo) {
   if (!orderInfo) {
@@ -241,6 +266,7 @@ module.exports = {
   getLatestOrderStatusByPhone,
   getCustomerSummaryByPhone,
   listRecentCustomersWithPhone,
+  listProductsForKnowledge,
   composeStatusReplyText,
   toE164,
 };

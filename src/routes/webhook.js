@@ -7,6 +7,7 @@ const whatsapp = require('../services/whatsapp');
 const shopify = require('../services/shopify');
 const triage = require('../services/ticketTriage');
 const autoAck = require('../services/autoAck');
+const aiAnswer = require('../services/aiAnswer');
 
 const router = express.Router();
 
@@ -79,8 +80,9 @@ async function handleIncomingMessage(waMessage, value) {
   // 2. Save the inbound message. If a concurrent retry beat us to it, the
   //    unique waMessageId index throws a duplicate-key error - treat that as
   //    "already handled" and stop, before any reply or ticket is created.
+  let inboundMessage;
   try {
-    await Message.create({
+    inboundMessage = await Message.create({
       conversationId: conversation._id,
       ticketId: conversation.activeTicketId || null,
       direction: 'inbound',
@@ -148,10 +150,54 @@ async function handleIncomingMessage(waMessage, value) {
     return;
   }
 
-  // Tier 3: general message - an instant acknowledgment that fits what they
-  // said, then it waits in Chats for the founder to answer.
+  // Tier 3: general message. If the shop's own information answers it, the AI
+  // replies with the answer; otherwise an instant acknowledgment that fits what
+  // they said, and it waits in Chats for the founder.
   await conversation.save();
-  await sendAutoAckIfDue(conversation, fromPhone, autoAck.categorize('text', text));
+  const category = autoAck.categorize('text', text);
+  if (await answerWithAi({ conversation, fromPhone, text, category, inboundMessage })) return;
+  await sendAutoAckIfDue(conversation, fromPhone, category);
+}
+
+// Greetings, compliments and bulk requests keep their fixed replies; these
+// kinds of message can get a real answer from the shop's information.
+const AI_CATEGORIES = new Set(['question', 'delivery_area', 'general']);
+
+async function answerWithAi({ conversation, fromPhone, text, category, inboundMessage }) {
+  if (!AI_CATEGORIES.has(category) || !aiAnswer.isConfigured()) return false;
+  if (await founderIsActive(conversation)) return false;
+
+  const history = await Message.find({
+    conversationId: conversation._id,
+    _id: { $ne: inboundMessage._id },
+    createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+  })
+    .sort({ createdAt: -1 })
+    .limit(8)
+    .lean();
+  const result = await aiAnswer.answer(text, history.reverse());
+  if (!result || !result.answered) return false;
+
+  await whatsapp.sendTextMessage(fromPhone, result.reply);
+  await Message.create({
+    conversationId: conversation._id,
+    direction: 'outbound',
+    type: 'text',
+    body: result.reply,
+    autoAck: 'ai_answer',
+  });
+  // Answered - show the reply as the latest message and don't flag the chat.
+  conversation.lastMessagePreview = result.reply.slice(0, 140);
+  conversation.unread = false;
+  await conversation.save();
+  return true;
+}
+
+// The founder has personally replied to this customer recently, so automatic
+// replies stay out of the conversation.
+function founderIsActive(conversation) {
+  const since = new Date(Date.now() - autoAck.cooldownHours() * 60 * 60 * 1000);
+  return Message.exists({ conversationId: conversation._id, sentByFounder: true, createdAt: { $gte: since } });
 }
 
 // Sends the acknowledgment unless it would be noise: none fits (e.g. "ok
@@ -161,7 +207,7 @@ async function sendAutoAckIfDue(conversation, fromPhone, category) {
   if (!category) return;
   const since = new Date(Date.now() - autoAck.cooldownHours() * 60 * 60 * 1000);
   const [founderActive, alreadySent] = await Promise.all([
-    Message.exists({ conversationId: conversation._id, sentByFounder: true, createdAt: { $gte: since } }),
+    founderIsActive(conversation),
     Message.exists({ conversationId: conversation._id, autoAck: category, createdAt: { $gte: since } }),
   ]);
   if (founderActive || alreadySent) return;

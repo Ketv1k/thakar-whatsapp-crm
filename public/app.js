@@ -124,6 +124,7 @@ async function loadConfig() {
   try {
     const cfg = await api('/api/config');
     if (cfg && cfg.slaHours) slaHours = cfg.slaHours;
+    aiStatus = (cfg && cfg.ai) || null;
     const testMode = !!(cfg && cfg.testMode);
     testBanner.classList.toggle('hidden', !testMode);
     navTest.classList.toggle('hidden', !testMode);
@@ -610,14 +611,27 @@ const TEST_SAMPLES = [
   ['Delivery area', 'Do you deliver to Pune?'],
   ['Compliment', 'Loved the food, thank you!'],
   ['Ok thanks', 'ok thanks'],
+  ['Free delivery?', 'Free delivery kitna order pe milta hai?'],
+  ['Store near me', 'Ahmedabad ma tamaru product kya male?'],
+  ['How to heat', 'How do I heat it? Can I use a microwave?'],
+  ['Not on website', 'Do you make food without salt for BP patients?'],
 ];
 let testCustomers = null;
+let aiStatus = null;
+
+function aiStatusLine() {
+  if (aiStatus && aiStatus.enabled) {
+    return `AI answers are <b>on</b> (${escapeHtml(aiStatus.model || aiStatus.provider)}): general questions are answered from your website info.`;
+  }
+  return 'AI answers are <b>off</b>: add your AI key in the server settings (AI_API_KEY) to turn them on. Until then, general questions get an acknowledgment.';
+}
 
 async function renderTestScreen(reload = false) {
   topbarTitle.textContent = 'Test';
   topbarSubtitle.classList.add('hidden');
   testBody.innerHTML = `
     <p class="test-intro">Pretend a customer just messaged you on WhatsApp and see exactly what your inbox does. Nothing is sent to anyone.</p>
+    <p class="test-intro">${aiStatusLine()}</p>
     <div class="test-field">
       <label for="test-customer">Customer</label>
       <select id="test-customer"><option>Loading your Shopify customers…</option></select>
@@ -703,6 +717,7 @@ function renderTestResult(r) {
     auto_answered: 'Answered automatically from Shopify. No work for you.',
     ticket_created: `Ticket #${r.ticketNumber} created (${issue}). It's waiting in your Tickets tab.`,
     added_to_ticket: `Added to their open Ticket #${r.ticketNumber}.`,
+    ai_answered: 'Answered automatically by AI from your website info. No work for you.',
     acknowledged: 'Acknowledged automatically. It is waiting in your Chats for you to reply.',
     chat: 'Added to your Chats for you to reply.',
   }[r.outcome];

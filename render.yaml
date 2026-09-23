@@ -37,3 +37,12 @@ services:
         value: "5"
       - key: CRM_VIP_SPEND
         value: "5000"
+      # AI answers from your website info. Set AI_API_KEY in the Render
+      # dashboard (Environment tab) to turn them on; for a non-Claude provider
+      # also set AI_PROVIDER=openai and AI_BASE_URL there.
+      - key: AI_PROVIDER
+        value: anthropic
+      - key: AI_MODEL
+        value: claude-opus-5
+      - key: AI_API_KEY
+        sync: false

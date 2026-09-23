@@ -108,6 +108,29 @@ Run the unit tests (triage rules + webhook signature verification) with:
 npm test
 ```
 
+## AI answers from your website info (bring your own model)
+
+General questions (delivery charges, stores, heating, storage, products, prices, payments,
+cancellations...) can get a real answer instead of an acknowledgment. The AI only uses:
+- `src/knowledge/thakar-kitchen.md` - FAQs, policies, stores and contact details from
+  thakarkitchen.com. **Edit this file** to change what it knows (e.g. add a temporary notice
+  under "Current notices"), then redeploy.
+- your live Shopify product list with prices and stock, refreshed daily.
+
+If the answer isn't there, it doesn't guess: the customer gets the normal acknowledgment and the
+message waits in Chats for you. Order status and problems keep their own flows (Shopify lookup,
+tickets). It stays quiet in conversations you're personally handling, and AI replies are labelled
+"Auto-reply" in the inbox. If the AI provider fails, the acknowledgment is sent instead.
+
+Choose any model with environment variables (no key = AI answers off):
+
+| Setting | Claude | Any OpenAI-compatible provider |
+|---|---|---|
+| `AI_PROVIDER` | `anthropic` | `openai` |
+| `AI_MODEL` | `claude-opus-5` (default), `claude-sonnet-5`, `claude-haiku-4-5` | the provider's model name |
+| `AI_API_KEY` | from console.anthropic.com | the provider's key |
+| `AI_BASE_URL` | leave empty | e.g. `https://api.openai.com/v1`, `https://generativelanguage.googleapis.com/v1beta/openai`, `https://api.deepseek.com/v1` |
+
 ## Test mode (try it before WhatsApp is connected)
 
 Set `TEST_MODE=true` and:
