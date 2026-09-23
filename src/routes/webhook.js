@@ -123,6 +123,10 @@ async function handleIncomingMessage(waMessage, value) {
         type: 'text',
         body: replyText,
       });
+      // Already answered - show the reply as the latest message and don't flag
+      // the chat as needing the founder.
+      conversation.lastMessagePreview = replyText.slice(0, 140);
+      conversation.unread = false;
     } catch (err) {
       console.error('[webhook] shopify status lookup failed', err.message);
       // Fail safe: don't leave the customer hanging - fall through to a ticket
