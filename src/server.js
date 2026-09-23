@@ -4,6 +4,8 @@ const express = require('express');
 const app = require('./app');
 const { connectDB } = require('./config/db');
 const { startSlaCheckJob } = require('./jobs/slaCheck');
+const { startScheduler } = require('./jobs/scheduler');
+const templates = require('./services/templates');
 
 // Serve the Founder Inbox PWA (public/) at the site root.
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -12,7 +14,9 @@ const PORT = process.env.PORT || 3000;
 
 async function start() {
   await connectDB();
+  await templates.ensureCatalog();
   startSlaCheckJob();
+  startScheduler();
   app.listen(PORT, () => {
     console.log(`[server] Thakar WhatsApp CRM listening on port ${PORT}`);
     if (process.env.TEST_MODE === 'true') {

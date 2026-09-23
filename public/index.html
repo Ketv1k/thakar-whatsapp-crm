@@ -37,6 +37,10 @@
       <nav class="side-nav">
         <a href="#/home" data-nav="home"><span class="ico" data-icon="home"></span><span>Home</span></a>
         <a href="#/inbox" data-nav="inbox"><span class="ico" data-icon="inbox"></span><span>Inbox</span><span class="nav-count hidden" data-count="inbox"></span></a>
+        <a href="#/customers" data-nav="customers"><span class="ico" data-icon="users"></span><span>Customers</span></a>
+        <a href="#/orders" data-nav="orders"><span class="ico" data-icon="wallet"></span><span>COD orders</span></a>
+        <a href="#/automations" data-nav="automations"><span class="ico" data-icon="bolt"></span><span>Automations</span></a>
+        <a href="#/campaigns" data-nav="campaigns"><span class="ico" data-icon="megaphone"></span><span>Campaigns</span></a>
         <a href="#/test" data-nav="test" class="test-only hidden"><span class="ico" data-icon="flask"></span><span>Test</span></a>
       </nav>
       <div class="side-foot">
@@ -100,14 +104,21 @@
         </aside>
       </section>
 
+      <section id="view-customers" class="view hidden" aria-label="Customers"></section>
+      <section id="view-automations" class="view hidden" aria-label="Automations"></section>
+      <section id="view-campaigns" class="view hidden" aria-label="Campaigns"></section>
+      <section id="view-orders" class="view hidden" aria-label="COD orders"></section>
       <section id="view-test" class="view hidden" aria-label="Test"></section>
+      <section id="view-more" class="view hidden" aria-label="More"></section>
     </main>
 
     <!-- Phone navigation -->
     <nav class="tabbar" aria-label="Main">
       <a href="#/home" data-nav="home"><span class="ico" data-icon="home"></span>Home</a>
       <a href="#/inbox" data-nav="inbox"><span class="tab-ico"><span class="ico" data-icon="inbox"></span><span class="nav-count hidden" data-count="inbox"></span></span>Inbox</a>
-      <a href="#/test" data-nav="test" class="test-only hidden"><span class="ico" data-icon="flask"></span>Test</a>
+      <a href="#/customers" data-nav="customers"><span class="ico" data-icon="users"></span>Customers</a>
+      <a href="#/campaigns" data-nav="campaigns"><span class="ico" data-icon="megaphone"></span>Campaigns</a>
+      <a href="#/more" data-nav="more"><span class="ico" data-icon="menu"></span>More</a>
     </nav>
   </div>
 
@@ -118,6 +129,6 @@
 
   <div id="toast" class="toast hidden" role="status"></div>
 
-  <script src="/app.js"></script>
+  <script type="module" src="/js/main.js"></script>
 </body>
 </html>

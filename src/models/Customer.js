@@ -8,7 +8,26 @@ const customerSchema = new mongoose.Schema(
     // Cached from Shopify so we don't hit their API on every message
     shopifyCustomerId: { type: String, default: null },
     lastOrderNumber: { type: String, default: null },
-    optedInMarketing: { type: Boolean, default: false },
+    // May receive marketing (campaigns, cart/reorder reminders). Set by the
+    // founder, by the customer replying START, by bulk opt-in, or from
+    // Shopify's marketing consent when that option is on. STOP clears it.
+    optedInMarketing: { type: Boolean, default: false, index: true },
+    optInSource: { type: String, default: null }, // 'manual' | 'keyword' | 'bulk' | 'shopify'
+    optedInAt: { type: Date, default: null },
+    optedOutAt: { type: Date, default: null },
+    // Last marketing message sent, so campaigns don't pile up on one person.
+    lastMarketingAt: { type: Date, default: null },
+    // From the Shopify sync (services/customerSync.js).
+    city: { type: String, default: '' },
+    ordersCount: { type: Number, default: 0 },
+    totalSpent: { type: Number, default: 0 },
+    currency: { type: String, default: 'INR' },
+    lastOrderAt: { type: Date, default: null, index: true },
+    // 'new' | 'returning' | 'vip' (services/customerStatus.js)
+    status: { type: String, default: 'new', index: true },
+    // Shopify's SMS marketing consent: 'SUBSCRIBED' | 'NOT_SUBSCRIBED' | ...
+    marketingConsent: { type: String, default: null },
+    shopifyUpdatedAt: { type: Date, default: null },
     // Founder's private note about this customer (allergies, preferences, etc.).
     notes: { type: String, default: '' },
     // Founder's own labels ("Jain", "Monthly", "Gifting") for finding and

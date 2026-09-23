@@ -10,6 +10,8 @@ const shopify = require('../services/shopify');
 const triage = require('../services/ticketTriage');
 const autoAck = require('../services/autoAck');
 const aiAnswer = require('../services/aiAnswer');
+const cod = require('../services/cod');
+const optIn = require('../services/optIn');
 
 const router = express.Router();
 
@@ -107,6 +109,31 @@ async function handleIncomingMessage(waMessage, value) {
   conversation.lastInboundAt = conversation.lastMessageAt;
   conversation.lastMessagePreview = content.preview;
   conversation.unread = true;
+  // They've written, so this is a real conversation now (it may have started
+  // with only automatic order updates or a campaign).
+  conversation.outboundOnly = false;
+
+  // Button taps on our messages: "Confirm order" / "Cancel order" on a COD
+  // confirmation. Confirming needs nothing from the founder; a cancel request
+  // does (cancel it in Shopify), so it stays marked as needing a reply.
+  if (content.type === 'button' || content.type === 'interactive') {
+    const payload = waMessage.button?.payload || waMessage.interactive?.button_reply?.id || '';
+    const codAnswer = await cod.handleButton({ payload, fromPhone, conversation });
+    if (codAnswer) {
+      conversation.unread = codAnswer.status === 'cancel_requested';
+      await conversation.save();
+      return;
+    }
+  }
+
+  // STOP / START (or the "Stop promotions" button on an offer).
+  const keyword = ['text', 'button', 'interactive'].includes(content.type) ? optIn.detectKeyword(text) : null;
+  if (keyword) {
+    await optIn.applyKeyword(keyword, { fromPhone, conversation });
+    conversation.unread = false;
+    await conversation.save();
+    return;
+  }
 
   // 3. If there's already an open ticket for this conversation, just append -
   //    no new automated action, it's now a human conversation. The customer

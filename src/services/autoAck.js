@@ -107,4 +107,7 @@ function cooldownHours() {
   return Number(process.env.ACK_COOLDOWN_HOURS || 12);
 }
 
-module.exports = { categorize, replyFor, cooldownHours };
+// Every acknowledgment category (for counting them on the Home screen).
+const CATEGORIES = Object.keys(REPLIES);
+
+module.exports = { categorize, replyFor, cooldownHours, CATEGORIES };

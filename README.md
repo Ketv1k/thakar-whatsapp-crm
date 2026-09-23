@@ -9,24 +9,46 @@ your existing Node/Express/MongoDB backend.
 ```
 src/
   app.js              Express app (routes + auth) - mount this into your existing backend, or run standalone
-  server.js           Standalone entry point (npm start) - connects DB, serves the PWA, starts the SLA job
-  models/              Customer, Conversation, Message, Ticket (Mongoose)
+  server.js           Standalone entry point (npm start) - connects DB, serves the PWA, starts the jobs
+  models/              Customer, Conversation, Message, Ticket, Order, AbandonedCheckout, StockAlert,
+                       Template, Campaign, Setting (Mongoose)
   services/
     whatsapp.js        Send/receive via Meta's WhatsApp Cloud API (+ download customers' photos/voice notes)
-    outbound.js         Every reply goes through here, so its delivery ticks can be tracked
+    outbound.js         Every message the app sends goes through here (text + templates), with delivery tracking
+    templates.js        WhatsApp message templates: built-in ones, rendering, sending, Meta approval
     deliveryStatus.js   Sent / delivered / read / failed ticks from WhatsApp's status webhooks
     messageContent.js   Turns a WhatsApp message (text, photo, voice note, file...) into what the inbox shows
     replyWindow.js      WhatsApp's 24-hour free-reply window
     inboxView.js        The chat list (search, filters), one chat, and the Home dashboard numbers
     founderReply.js     Your reply from the inbox (moves the ticket to "You replied")
-    shopify.js          Look up a customer's latest order by phone (Shopify Admin GraphQL)
+    automations.js      On/off switches and settings for the automatic messages
+    orderSync.js        Shopify orders -> order updates (confirmed, shipped, delivered...)
+    orderEvents.js      The rules for which order update is due (pure, tested)
+    cod.js              COD confirmation: Confirm / Cancel buttons and the answers
+    customerSync.js     Shopify customers -> the CRM (orders, spend, city, marketing consent)
+    segments.js         Customer groups (VIP, lapsed, opted in...)
+    campaigns.js        Broadcasts: audience, cost, sending, results
+    cartRecovery.js     Abandoned-cart reminders
+    reorder.js          Reorder reminders
+    backInStock.js      Back-in-stock alerts
+    optIn.js            STOP / START and marketing opt-in
+    pricing.js          What WhatsApp messages cost (for the estimates in the app)
+    shopify.js          Shopify Admin GraphQL (orders, customers, products, tags)
     ticketTriage.js     The keyword logic that decides: auto-answer / create ticket / leave as general chat
   routes/
-    webhook.js          Receives WhatsApp messages and delivery ticks, runs triage
+    webhook.js          Receives WhatsApp messages, button taps and delivery ticks; runs triage
     inbox.js             Home dashboard, the one inbox, replies, media, "flag as ticket" escape hatch
     tickets.js            Ticket list + reply + resolve
-  jobs/slaCheck.js      Hourly cron: pings you on WhatsApp if a ticket's been open 6+ hours
-public/                 Founder Inbox - mobile-first PWA (installable, "Add to Home Screen")
+    customers.js          Customer directory, groups, profiles, bulk opt-in
+    automations.js        Automation switches, stats, "check now"
+    campaigns.js          Campaign drafts, estimates, scheduling, results
+    templates.js          Message templates: list, create, submit to Meta, refresh
+    shop.js               COD orders, product search, back-in-stock requests
+    testMode.js           Test-mode simulators (messages, orders, COD taps, carts, reorders, restocks)
+  jobs/
+    scheduler.js        Background jobs: order/customer/cart sync, reminders, campaigns
+    slaCheck.js         Hourly: pings you on WhatsApp if a ticket's been open 6+ hours
+public/                 Founder Inbox - installable web app (no build step; ES modules in public/js/)
 ```
 
 ## How the support flow works
@@ -140,7 +162,9 @@ Choose any model with environment variables (no key = AI answers off):
 ## Test mode (try it before WhatsApp is connected)
 
 Set `TEST_MODE=true` and:
-- the inbox shows a "Test mode" label and a **Test** page;
+- the inbox shows a "Test mode" label and a **Test** page, where you can also place pretend
+  orders (prepaid or COD), tap the customer's Confirm / Cancel, ship and deliver them, leave a
+  cart, and trigger reorder and back-in-stock messages - all through the real automation code;
 - on the Test page you pick one of your real Shopify customers (or type any number), choose or
   type their message (or send a photo / voice note), and see exactly what happens:
   auto-answered from Shopify, a ticket created, or waiting in the Inbox, plus the reply the
@@ -204,15 +228,79 @@ automatically — no manual data entry:
 - **Past tickets** — every support issue this customer has raised.
 - **Tags** — your own labels ("Jain", "Monthly", "Gifting"); searchable from the inbox.
 - **Private note** — allergies, delivery preferences, "buys in bulk", etc.
-- **Marketing opt-in** — toggle that will feed Phase 2 broadcasts.
+- **Orders with COD answers**, and **back-in-stock requests** for this customer.
+- **Offers opt-in** — whether they get campaigns and reminders, and how they opted in.
 
 API: `GET /api/customers/:phone` returns the assembled profile; `PATCH /api/customers/:phone`
 updates the note / tags / opt-in. Both require the Inbox API key.
 
-## Not built yet (Phase 2 / 3, per our plan)
-- Marketing broadcasts to a customer segment
-- Abandoned cart recovery
-- Product catalog
+## Order updates and COD confirmation
 
-Both slot into the same structure - a new route + a template + a trigger in `jobs/` - once Phase 1 is
-live and your message templates are approved.
+Switch these on in **Automations**. Every few minutes the app asks Shopify for orders changed
+since its last check (so it catches up after the server slept) and sends:
+
+- **Order confirmed** — when an order is placed.
+- **COD confirmation** — instead of "confirmed" for cash-on-delivery orders (the plain COD
+  gateway, and Razorpay Magic "partial COD" orders tagged `razorpay_partial_cod`, where ₹99 is
+  paid online). The message shows the amount to pay on delivery and has **Confirm order** /
+  **Cancel order** buttons. The answer is tagged on the order in Shopify (`COD confirmed on
+  WhatsApp` / `COD cancel requested on WhatsApp`); cancel requests show on Home and on the **COD
+  orders** page so you can cancel them in Shopify. You can also mark answers yourself.
+- **Shipped** — with the tracking link (India Post) or the order status page.
+- **Out for delivery / Delivered** — only if your courier updates delivery status in Shopify.
+
+Safety: each update is sent at most once (claimed in the database first); an automation only acts
+on things that happen after you switch it on; updates that are too old to be useful are dropped;
+if several are due at once only the newest goes. These are *utility* templates: about ₹0.14 each
+incl. GST, free if the customer messaged you in the last 24 hours.
+
+## Customers, groups and campaigns
+
+- **Customers** — every Shopify customer with a phone number (synced every 6 hours) plus everyone
+  who has messaged, with orders, spend, last order, city, tags and whether they get offers.
+  Groups: VIP, Returning, Ordered once, Lapsed 45+ days (`CRM_LAPSED_DAYS`), No orders yet,
+  Opted in to offers — plus any tag.
+- **Campaigns** — pick a group, an approved message and a time. The composer shows how many
+  people it reaches and what it costs (Meta's marketing rate, ₹0.8631 + 18% GST ≈ ₹1.02 each),
+  and a preview. "Send a test to me" goes to `FOUNDER_PHONE`. Results: sent, delivered, read,
+  replies within 3 days, and orders + revenue within 7 days.
+- New campaign messages can be written in the app ("Write a new one"); they get a **Stop
+  promotions** button and go to Meta for approval. Photo messages can be made in WhatsApp Manager
+  and are imported by **Refresh** on the Automations page.
+- Campaigns only go to customers who **opted in to offers**, and skip anyone who got an offer in
+  the last `CAMPAIGN_MIN_GAP_HOURS` (24). Each person gets a campaign once, even if sending is
+  interrupted. Sending stops by itself if WhatsApp keeps refusing.
+
+### Who gets offers (opt-in)
+
+WhatsApp only allows marketing to people who agreed to it. A customer is opted in when:
+you switch it on in their profile; they reply **START**; you opt in a whole group on the
+Customers page (only if they already agreed elsewhere, e.g. in Zoko); or — if you turn it on in
+Automations — they accepted marketing at checkout in Shopify. Replying **STOP** (or tapping
+**Stop promotions**) opts them out; order updates still reach them.
+
+## Cart, reorder and back-in-stock reminders
+
+- **Abandoned cart** — one reminder with the link back to the cart, 30 min to 6 hours after
+  someone leaves checkout (your choice); not if they ordered meanwhile, not twice a day. Orders
+  placed within 3 days count as recovered.
+- **Reorder reminders** — 14/21/30/45 days after an order ships, naming what they bought; skipped
+  if they ordered again; at most one a month per customer.
+- **Back-in-stock** — on a customer's profile, search a product (or a sold-out size) they asked
+  about; every half hour the app checks Shopify and messages everyone waiting once it's back.
+
+All three are marketing messages: opted-in customers only (back-in-stock needs only the
+customer's own request), never at night (`QUIET_HOURS`, default 9pm–9am India time).
+
+## Going live checklist
+
+1. Connect WhatsApp (the `WHATSAPP_*` settings) and set `WHATSAPP_BUSINESS_ACCOUNT_ID`.
+2. Remove `TEST_MODE` (or set it to `false`).
+3. Automations → **Submit all to Meta**. Approval usually takes minutes to a day; **Refresh**
+   shows the status. Nothing that needs a template is sent until it's approved.
+4. Switch on the automations you want. Decide who gets offers (see above).
+5. On Render, switch to a paid plan so the background jobs run all the time.
+
+## Ideas for later
+- Product catalog messages
+- Several team members with their own logins

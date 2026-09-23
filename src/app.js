@@ -18,6 +18,10 @@ const webhookRoutes = require('./routes/webhook');
 const inboxRoutes = require('./routes/inbox');
 const ticketRoutes = require('./routes/tickets');
 const customerRoutes = require('./routes/customers');
+const automationRoutes = require('./routes/automations');
+const templateRoutes = require('./routes/templates');
+const campaignRoutes = require('./routes/campaigns');
+const shopRoutes = require('./routes/shop');
 const { requireInboxAuth } = require('./middleware/auth');
 const { verifyWhatsAppSignature } = require('./middleware/verifyWhatsAppSignature');
 
@@ -44,6 +48,10 @@ app.use('/webhook', webhookJson, verifyWhatsAppSignature, webhookRoutes);
 app.use('/api', apiJson, requireInboxAuth, inboxRoutes);
 app.use('/api/tickets', apiJson, requireInboxAuth, ticketRoutes);
 app.use('/api/customers', apiJson, requireInboxAuth, customerRoutes);
+app.use('/api/automations', apiJson, requireInboxAuth, automationRoutes);
+app.use('/api/templates', apiJson, requireInboxAuth, templateRoutes);
+app.use('/api/campaigns', apiJson, requireInboxAuth, campaignRoutes);
+app.use('/api', apiJson, requireInboxAuth, shopRoutes);
 
 // Customer-message simulator; only exists while TEST_MODE=true.
 if (process.env.TEST_MODE === 'true') {

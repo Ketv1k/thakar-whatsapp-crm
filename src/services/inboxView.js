@@ -5,7 +5,11 @@ const Conversation = require('../models/Conversation');
 const Customer = require('../models/Customer');
 const Message = require('../models/Message');
 const Ticket = require('../models/Ticket');
+const Order = require('../models/Order');
+const Campaign = require('../models/Campaign');
 const replyWindow = require('./replyWindow');
+const autoAck = require('./autoAck');
+const { startOfTodayIndia } = require('../utils/time');
 
 const FILTERS = ['all', 'needs_reply', 'tickets'];
 const LIST_LIMIT = 100;
@@ -121,11 +125,14 @@ async function decorate(conversations) {
 async function listConversations({ filter = 'all', q = '' } = {}) {
   const f = FILTERS.includes(filter) ? filter : 'all';
   const search = parseSearch(q);
-  const query = { ...filterQuery(f), ...(await searchQuery(search)) };
+  // Chats with only automatic messages (the customer never wrote) stay out
+  // of the list; a search still finds them.
+  const visible = search ? {} : { outboundOnly: { $ne: true } };
+  const query = { ...visible, ...filterQuery(f), ...(await searchQuery(search)) };
 
   const [rows, all, needsReply, tickets] = await Promise.all([
     Conversation.find(query).sort({ lastMessageAt: -1 }).limit(LIST_LIMIT).lean(),
-    Conversation.estimatedDocumentCount(),
+    Conversation.countDocuments({ outboundOnly: { $ne: true } }),
     Conversation.countDocuments({ unread: true }),
     Conversation.countDocuments({ activeTicketId: { $ne: null } }),
   ]);
@@ -148,57 +155,80 @@ async function getConversation(id) {
   return { conversation: item, messages };
 }
 
-// India has one time zone and no daylight saving, so "today" is fixed at +5:30.
-const IST_OFFSET_MS = 330 * 60 * 1000;
-function startOfTodayIndia(now = new Date()) {
-  const local = new Date(now.getTime() + IST_OFFSET_MS);
-  local.setUTCHours(0, 0, 0, 0);
-  return new Date(local.getTime() - IST_OFFSET_MS);
+const ORDER_UPDATE_KINDS = ['order_confirmed', 'cod_request', 'order_shipped', 'out_for_delivery', 'order_delivered'];
+const HOUR = 60 * 60 * 1000;
+
+async function lastCampaignSummary() {
+  const c = await Campaign.findOne({ status: { $in: ['sent', 'sending'] } }).sort({ startedAt: -1 });
+  if (!c) return null;
+  const stats = await require('./campaigns').stats(c);
+  return { _id: c._id, name: c.name, status: c.status, startedAt: c.startedAt, ...stats };
 }
 
 async function dashboard() {
   const today = startOfTodayIndia();
-  const slaCutoff = new Date(Date.now() - slaHours() * 60 * 60 * 1000);
+  const slaCutoff = new Date(Date.now() - slaHours() * HOUR);
+  const codWaiting = { isCod: true, 'cod.status': 'awaiting', cancelledAt: null, shippedAt: null };
 
-  const [openTickets, waitingChats, autoToday, inboundToday, customersToday, ticketsToday, needsReply] = await Promise.all([
-    Ticket.find({ status: { $in: ['open', 'founder_replied'] } })
-      .sort({ lastActivityAt: 1 })
-      .limit(200)
-      .lean(),
-    Conversation.find({ unread: true, activeTicketId: null }).sort({ lastMessageAt: 1 }).limit(200).lean(),
-    Message.aggregate([
-      { $match: { direction: 'outbound', autoAck: { $ne: null }, createdAt: { $gte: today } } },
-      { $group: { _id: '$autoAck', n: { $sum: 1 } } },
-    ]),
-    Message.countDocuments({ direction: 'inbound', createdAt: { $gte: today } }),
-    Message.distinct('conversationId', { direction: 'inbound', createdAt: { $gte: today } }),
-    Ticket.countDocuments({ createdAt: { $gte: today } }),
-    Conversation.countDocuments({ unread: true }),
-  ]);
+  const [openTickets, waitingChats, autoToday, inboundToday, customersToday, ticketsToday, needsReply, codOrders, codCancels, lastCampaign] =
+    await Promise.all([
+      Ticket.find({ status: { $in: ['open', 'founder_replied'] } })
+        .sort({ lastActivityAt: 1 })
+        .limit(200)
+        .lean(),
+      Conversation.find({ unread: true, activeTicketId: null }).sort({ lastMessageAt: 1 }).limit(200).lean(),
+      Message.aggregate([
+        { $match: { direction: 'outbound', autoAck: { $ne: null }, createdAt: { $gte: today }, status: { $ne: 'failed' } } },
+        { $group: { _id: '$autoAck', n: { $sum: 1 } } },
+      ]),
+      Message.countDocuments({ direction: 'inbound', createdAt: { $gte: today } }),
+      Message.distinct('conversationId', { direction: 'inbound', createdAt: { $gte: today } }),
+      Ticket.countDocuments({ createdAt: { $gte: today } }),
+      Conversation.countDocuments({ unread: true }),
+      Order.find(codWaiting).sort({ 'cod.requestedAt': 1 }).limit(200).lean(),
+      Order.find({ isCod: true, 'cod.status': 'cancel_requested', cancelledAt: null, shippedAt: null }).sort({ 'cod.answeredAt': 1 }).limit(20).lean(),
+      lastCampaignSummary(),
+    ]);
 
   const auto = Object.fromEntries(autoToday.map((r) => [r._id, r.n]));
   const aiAnswers = auto.ai_answer || 0;
   const orderStatus = auto.order_status || 0;
   const ticketAcks = auto.ticket || 0;
-  const acknowledgments = Object.entries(auto)
-    .filter(([k]) => !['ai_answer', 'order_status', 'ticket'].includes(k))
-    .reduce((sum, [, n]) => sum + n, 0);
+  const acknowledgments = autoAck.CATEGORIES.reduce((sum, k) => sum + (auto[k] || 0), 0);
+  const orderUpdates = ORDER_UPDATE_KINDS.reduce((sum, k) => sum + (auto[k] || 0), 0);
 
   const overdue = openTickets.filter((t) => t.lastActivityAt < slaCutoff);
   const waitingOnYou = openTickets.filter((t) => t.status === 'open');
+  const codStale = codOrders.filter((o) => o.cod.requestedAt && Date.now() - new Date(o.cod.requestedAt).getTime() > 3 * HOUR);
 
-  // Who to look at first: overdue tickets, new tickets, then chats waiting
+  // Who to look at first: cancel requests (before the order ships), overdue
+  // tickets, new tickets, COD orders nobody confirmed, then chats waiting
   // longest. Names are attached in one query at the end.
+  const phoneOf = (a) => (a.ticket ? a.ticket.customerPhone : a.order ? a.order.phone : a.conversation.customerPhone);
+  // One line per customer: the most urgent reason wins.
+  const seen = new Set();
   const attention = [
+    ...codCancels.map((o) => ({ kind: 'cod_cancel', order: o })),
     ...overdue.map((t) => ({ kind: 'overdue', ticket: t })),
     ...waitingOnYou.filter((t) => !overdue.includes(t)).map((t) => ({ kind: 'ticket', ticket: t })),
+    ...codStale.map((o) => ({ kind: 'cod_waiting', order: o })),
     ...waitingChats.map((c) => ({ kind: 'needs_reply', conversation: c })),
-  ].slice(0, 8);
+  ]
+    .filter((a) => {
+      const phone = phoneOf(a);
+      if (seen.has(phone)) return false;
+      seen.add(phone);
+      return true;
+    })
+    .slice(0, 8);
 
-  const phones = attention.map((a) => (a.ticket ? a.ticket.customerPhone : a.conversation.customerPhone));
-  const names = new Map(
-    (await Customer.find({ phone: { $in: phones } }).select('phone name').lean()).map((c) => [c.phone, c.name])
-  );
+  const phones = attention.map(phoneOf);
+  const [names, chats] = await Promise.all([
+    Customer.find({ phone: { $in: phones } }).select('phone name').lean(),
+    Conversation.find({ customerPhone: { $in: phones } }).select('customerPhone').lean(),
+  ]);
+  const nameByPhone = new Map(names.map((c) => [c.phone, c.name]));
+  const chatByPhone = new Map(chats.map((c) => [c.customerPhone, c._id]));
 
   return {
     needsReply,
@@ -210,29 +240,49 @@ async function dashboard() {
       },
       answeredForYou: { total: aiAnswers + orderStatus, ai: aiAnswers, orderStatus },
       messagesToday: { count: inboundToday, customers: customersToday.length },
+      cod: {
+        waiting: codOrders.length,
+        atStake: Math.round(codOrders.reduce((s, o) => s + (o.outstanding > 0 ? o.outstanding : o.total || 0), 0)),
+        cancelRequests: codCancels.length,
+      },
     },
     attention: attention.map((a) => {
+      const phone = phoneOf(a);
+      const base = {
+        kind: a.kind,
+        customerPhone: phone,
+        customerName: nameByPhone.get(phone) || (a.order && a.order.customerName) || '',
+        conversationId: chatByPhone.get(phone) || null,
+      };
       if (a.ticket) {
+        return { ...base, ticketNumber: a.ticket.ticketNumber, issueType: a.ticket.issueType, since: a.ticket.lastActivityAt };
+      }
+      if (a.order) {
+        const amount = a.order.outstanding > 0 ? a.order.outstanding : a.order.total;
         return {
-          kind: a.kind,
-          conversationId: a.ticket.conversationId,
-          customerPhone: a.ticket.customerPhone,
-          customerName: names.get(a.ticket.customerPhone) || '',
-          ticketNumber: a.ticket.ticketNumber,
-          issueType: a.ticket.issueType,
-          since: a.ticket.lastActivityAt,
+          ...base,
+          orderId: a.order._id,
+          orderName: a.order.name,
+          amount,
+          currency: a.order.currency,
+          since: a.kind === 'cod_cancel' ? a.order.cod.answeredAt : a.order.cod.requestedAt,
         };
       }
-      return {
-        kind: a.kind,
-        conversationId: a.conversation._id,
-        customerPhone: a.conversation.customerPhone,
-        customerName: names.get(a.conversation.customerPhone) || '',
-        preview: a.conversation.lastMessagePreview || '',
-        since: a.conversation.lastInboundAt || a.conversation.lastMessageAt,
-      };
+      return { ...base, preview: a.conversation.lastMessagePreview || '', since: a.conversation.lastInboundAt || a.conversation.lastMessageAt };
     }),
-    automationsToday: { orderStatus, aiAnswers, acknowledgments, ticketsOpened: ticketsToday, ticketAcks },
+    automationsToday: {
+      orderStatus,
+      aiAnswers,
+      acknowledgments,
+      ticketsOpened: ticketsToday,
+      ticketAcks,
+      orderUpdates,
+      codReplies: auto.cod_reply || 0,
+      cartReminders: auto.cart_reminder || 0,
+      reorderReminders: auto.reorder_reminder || 0,
+      backInStock: auto.back_in_stock || 0,
+    },
+    lastCampaign,
   };
 }
 

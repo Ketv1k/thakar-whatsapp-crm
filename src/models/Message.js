@@ -27,13 +27,23 @@ const messageSchema = new mongoose.Schema(
     waMessageId: { type: String, default: null },
     // Delivery ticks for outgoing messages, from WhatsApp's status webhooks
     // (see services/deliveryStatus.js). null for incoming messages.
-    status: { type: String, enum: ['sent', 'delivered', 'read', 'failed'], default: null },
+    // 'queued' is a campaign message claimed for sending but not sent yet.
+    status: { type: String, enum: ['queued', 'sent', 'delivered', 'read', 'failed'], default: null },
     statusAt: { type: Date, default: null },
     statusError: { type: String, default: undefined },
     sentByFounder: { type: Boolean, default: false },
-    // Set on messages the app sent by itself: 'order_status', 'ticket', or an
-    // acknowledgment category from services/autoAck.js ('greeting', 'photo'...).
+    // Set on messages the app sent by itself: 'order_status', 'ticket', an
+    // acknowledgment category from services/autoAck.js ('greeting', 'photo'...),
+    // or an automation ('order_shipped', 'cod_request', 'cart_reminder'...,
+    // 'campaign').
     autoAck: { type: String, default: null },
+    // Template messages: which template, and the campaign it belongs to.
+    templateName: { type: String, default: null },
+    campaignId: { type: mongoose.Schema.Types.ObjectId, ref: 'Campaign', default: null },
+    // Quick-reply buttons shown under a template message ("Confirm order").
+    buttons: { type: [String], default: undefined },
+    // Saved while TEST_MODE was on: logged, never actually sent.
+    test: { type: Boolean, default: undefined },
   },
   { timestamps: true }
 );
@@ -49,5 +59,13 @@ messageSchema.index(
   { waMessageId: 1 },
   { unique: true, partialFilterExpression: { waMessageId: { $type: 'string' } } }
 );
+
+// A campaign reaches each chat at most once, even if sending is interrupted
+// and resumed.
+messageSchema.index(
+  { campaignId: 1, conversationId: 1 },
+  { unique: true, partialFilterExpression: { campaignId: { $type: 'objectId' } } }
+);
+messageSchema.index({ autoAck: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Message', messageSchema);

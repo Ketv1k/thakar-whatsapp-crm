@@ -55,24 +55,104 @@ async function accessToken() {
 // Runs a GraphQL Admin API query and returns its `data`. Shopify reports query
 // problems (missing scope, bad field) in `errors` with an HTTP 200, so those are
 // thrown here - otherwise they'd be indistinguishable from "customer not found".
-async function graphql(query, variables) {
+// Big background syncs can hit Shopify's rate limit ("THROTTLED"); those wait
+// and retry a few times.
+async function graphql(query, variables, { timeout = 10000, retries = 3 } = {}) {
   const token = await accessToken();
   const version = process.env.SHOPIFY_API_VERSION || '2026-07';
-  const { data } = await axios.post(
-    `https://${storeDomain()}/admin/api/${version}/graphql.json`,
-    { query, variables },
-    {
-      headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-      timeout: 10000,
+  for (let attempt = 0; ; attempt++) {
+    const { data } = await axios.post(
+      `https://${storeDomain()}/admin/api/${version}/graphql.json`,
+      { query, variables },
+      {
+        headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+        timeout,
+      }
+    );
+    if (data.errors) {
+      const throttled = Array.isArray(data.errors) && data.errors.some((e) => e.extensions && e.extensions.code === 'THROTTLED');
+      if (throttled && attempt < retries) {
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+      const detail = Array.isArray(data.errors)
+        ? data.errors.map((e) => e.message).join('; ')
+        : JSON.stringify(data.errors);
+      throw new Error(`Shopify GraphQL error: ${detail}`);
     }
-  );
-  if (data.errors) {
-    const detail = Array.isArray(data.errors)
-      ? data.errors.map((e) => e.message).join('; ')
-      : JSON.stringify(data.errors);
-    throw new Error(`Shopify GraphQL error: ${detail}`);
+    return data.data;
   }
-  return data.data;
+}
+
+function isConfigured() {
+  return !!process.env.SHOPIFY_STORE_DOMAIN &&
+    !!((process.env.SHOPIFY_CLIENT_ID && process.env.SHOPIFY_CLIENT_SECRET) || process.env.SHOPIFY_ADMIN_API_TOKEN);
+}
+
+// The public shop address for links in messages.
+function storeUrl() {
+  return String(process.env.STORE_URL || 'https://thakarkitchen.com').replace(/\/+$/, '');
+}
+
+// Link to an order in the Shopify admin, e.g. for "cancel it in Shopify".
+function adminOrderUrl(shopifyGid) {
+  const id = String(shopifyGid || '').split('/').pop();
+  const handle = String(process.env.SHOPIFY_STORE_DOMAIN || '').replace(/\.myshopify\.com$/, '');
+  return handle && /^\d+$/.test(id) ? `https://admin.shopify.com/store/${handle}/orders/${id}` : null;
+}
+
+// Adds tags to an order (e.g. "COD confirmed on WhatsApp") so it shows in the
+// Shopify admin. Needs the write_orders permission.
+async function addOrderTags(shopifyGid, tags) {
+  const data = await graphql(
+    `mutation AddTags($id: ID!, $tags: [String!]!) {
+      tagsAdd(id: $id, tags: $tags) { userErrors { field message } }
+    }`,
+    { id: shopifyGid, tags }
+  );
+  const errors = data?.tagsAdd?.userErrors || [];
+  if (errors.length) throw new Error(errors.map((e) => e.message).join('; '));
+}
+
+const PRODUCT_FIELDS = `
+  id title handle onlineStoreUrl status tracksInventory totalInventory
+  variants(first: 20) { edges { node { id title availableForSale } } }
+`;
+
+function mapProduct(p) {
+  const variants = (p.variants?.edges || []).map((e) => ({
+    id: e.node.id,
+    title: e.node.title,
+    available: !!e.node.availableForSale,
+  }));
+  return {
+    id: p.id,
+    title: p.title,
+    url: p.onlineStoreUrl || `${storeUrl()}/products/${p.handle}`,
+    active: p.status === 'ACTIVE',
+    variants: variants.length === 1 && variants[0].title === 'Default Title' ? [{ ...variants[0], title: '' }] : variants,
+    inStock: variants.length > 0 && variants.every((v) => v.available),
+    soldOutVariants: variants.filter((v) => !v.available).map((v) => v.title),
+  };
+}
+
+// Product search for "notify me when it's back".
+async function searchProducts(text) {
+  const q = String(text || '').replace(/["\\]/g, ' ').trim().slice(0, 60);
+  const data = await graphql(
+    `query Products($q: String!) { products(first: 12, query: $q) { edges { node { ${PRODUCT_FIELDS} } } } }`,
+    { q: q ? `${q} status:active` : 'status:active' }
+  );
+  return (data?.products?.edges || []).map((e) => mapProduct(e.node));
+}
+
+async function productsByIds(ids) {
+  if (!ids.length) return [];
+  const data = await graphql(
+    `query Nodes($ids: [ID!]!) { nodes(ids: $ids) { ... on Product { ${PRODUCT_FIELDS} } } }`,
+    { ids }
+  );
+  return (data?.nodes || []).filter((n) => n && n.id).map(mapProduct);
 }
 
 // WhatsApp numbers arrive as digits only (e.g. "919876543210").
@@ -263,6 +343,15 @@ function composeStatusReplyText(orderInfo) {
 }
 
 module.exports = {
+  graphql,
+  storeDomain,
+  isConfigured,
+  storeUrl,
+  adminOrderUrl,
+  addOrderTags,
+  searchProducts,
+  productsByIds,
+  mapProduct,
   getLatestOrderStatusByPhone,
   getCustomerSummaryByPhone,
   listRecentCustomersWithPhone,

@@ -13,6 +13,9 @@ const conversationSchema = new mongoose.Schema(
     // When the customer last messaged. Free-form replies are only allowed for
     // 24 hours after this (WhatsApp's customer service window).
     lastInboundAt: { type: Date, default: null },
+    // Only automatic updates or campaigns so far - the customer hasn't written.
+    // Kept out of the inbox list (search still finds it) until they reply.
+    outboundOnly: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

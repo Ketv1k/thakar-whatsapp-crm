@@ -43,7 +43,7 @@ test('voice notes, files and reactions get readable previews', () => {
 
 test('delivery ticks only move forward', () => {
   const read = statusChange({ id: 'w1', status: 'read', timestamp: '1700000000' });
-  assert.deepEqual(read.filter.status.$in, [null, 'sent', 'delivered', 'failed']);
+  assert.deepEqual(read.filter.status.$in, [null, 'queued', 'sent', 'delivered', 'failed']);
   assert.equal(read.update.$set.status, 'read');
   assert.equal(read.update.$set.statusAt.getTime(), 1700000000 * 1000);
 

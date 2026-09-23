@@ -149,4 +149,13 @@ function testTone() {
   return buf;
 }
 
-module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead, downloadMedia };
+// A short, readable reason from a failed WhatsApp API call, e.g.
+// "(#131047) Re-engagement message".
+function describeError(err) {
+  const e = err && err.response && err.response.data && err.response.data.error;
+  if (!e) return (err && err.message) || 'Send failed';
+  const detail = (e.error_data && e.error_data.details) || e.error_user_msg || e.message || 'Send failed';
+  return `${e.code ? `(#${e.code}) ` : ''}${detail}`.slice(0, 300);
+}
+
+module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead, downloadMedia, describeError, testMode };

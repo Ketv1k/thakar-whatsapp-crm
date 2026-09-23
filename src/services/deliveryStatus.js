@@ -29,7 +29,7 @@ function statusChange(entry) {
 
   const rank = PROGRESS.indexOf(status);
   if (rank === -1) return null;
-  const earlier = [null, ...PROGRESS.slice(0, rank), 'failed'];
+  const earlier = [null, 'queued', ...PROGRESS.slice(0, rank), 'failed'];
   return {
     filter: { waMessageId: id, direction: 'outbound', status: { $in: earlier } },
     update: { $set: { status, statusAt }, $unset: { statusError: '' } },
