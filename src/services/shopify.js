@@ -3,23 +3,76 @@
 // order + fulfillment/tracking status in a single request).
 const axios = require('axios');
 
-function client() {
+function storeDomain() {
   const domain = process.env.SHOPIFY_STORE_DOMAIN;
-  const token = process.env.SHOPIFY_ADMIN_API_TOKEN;
-  const version = process.env.SHOPIFY_API_VERSION || '2024-07';
+  if (!domain) throw new Error('SHOPIFY_STORE_DOMAIN not configured');
+  return domain;
+}
 
-  if (!domain || !token) {
-    throw new Error('SHOPIFY_STORE_DOMAIN / SHOPIFY_ADMIN_API_TOKEN not configured');
+// Two ways to authenticate, depending on how the Shopify app was created:
+//  - Dev Dashboard app: SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET. We exchange
+//    them for an access token via the client credentials grant. Those tokens
+//    last 24h, so we cache one and fetch a fresh one shortly before expiry.
+//  - Custom app made in the store admin: a permanent SHOPIFY_ADMIN_API_TOKEN.
+let cachedToken = null; // { value, expiresAt }
+let tokenRequest = null; // shared in-flight request, so concurrent calls fetch once
+
+async function fetchClientCredentialsToken() {
+  const { data } = await axios.post(
+    `https://${storeDomain()}/admin/oauth/access_token`,
+    new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: process.env.SHOPIFY_CLIENT_ID,
+      client_secret: process.env.SHOPIFY_CLIENT_SECRET,
+    }),
+    { timeout: 10000 }
+  );
+  // Renew 5 minutes early so a request never goes out with an expiring token.
+  return { value: data.access_token, expiresAt: Date.now() + (data.expires_in - 300) * 1000 };
+}
+
+async function accessToken() {
+  if (process.env.SHOPIFY_CLIENT_ID && process.env.SHOPIFY_CLIENT_SECRET) {
+    if (cachedToken && Date.now() < cachedToken.expiresAt) return cachedToken.value;
+    if (!tokenRequest) {
+      tokenRequest = fetchClientCredentialsToken()
+        .then((token) => {
+          cachedToken = token;
+          return token.value;
+        })
+        .finally(() => {
+          tokenRequest = null;
+        });
+    }
+    return tokenRequest;
   }
+  if (process.env.SHOPIFY_ADMIN_API_TOKEN) return process.env.SHOPIFY_ADMIN_API_TOKEN;
+  throw new Error(
+    'Shopify not configured: set SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET (or SHOPIFY_ADMIN_API_TOKEN)'
+  );
+}
 
-  return axios.create({
-    baseURL: `https://${domain}/admin/api/${version}`,
-    headers: {
-      'X-Shopify-Access-Token': token,
-      'Content-Type': 'application/json',
-    },
-    timeout: 10000,
-  });
+// Runs a GraphQL Admin API query and returns its `data`. Shopify reports query
+// problems (missing scope, bad field) in `errors` with an HTTP 200, so those are
+// thrown here - otherwise they'd be indistinguishable from "customer not found".
+async function graphql(query, variables) {
+  const token = await accessToken();
+  const version = process.env.SHOPIFY_API_VERSION || '2026-07';
+  const { data } = await axios.post(
+    `https://${storeDomain()}/admin/api/${version}/graphql.json`,
+    { query, variables },
+    {
+      headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+      timeout: 10000,
+    }
+  );
+  if (data.errors) {
+    const detail = Array.isArray(data.errors)
+      ? data.errors.map((e) => e.message).join('; ')
+      : JSON.stringify(data.errors);
+    throw new Error(`Shopify GraphQL error: ${detail}`);
+  }
+  return data.data;
 }
 
 // WhatsApp numbers arrive as digits only (e.g. "919876543210").
@@ -44,7 +97,6 @@ const FULFILLMENT_LABELS = {
  * Returns null if no matching customer/order is found.
  */
 async function getLatestOrderStatusByPhone(phone) {
-  const api = client();
   const query = `
     query FindCustomerOrders($searchQuery: String!) {
       customers(first: 1, query: $searchQuery) {
@@ -73,12 +125,9 @@ async function getLatestOrderStatusByPhone(phone) {
     }
   `;
 
-  const { data } = await api.post('/graphql.json', {
-    query,
-    variables: { searchQuery: `phone:${toE164(phone)}` },
-  });
+  const data = await graphql(query, { searchQuery: `phone:${toE164(phone)}` });
 
-  const customerEdge = data?.data?.customers?.edges?.[0];
+  const customerEdge = data?.customers?.edges?.[0];
   const orderEdge = customerEdge?.node?.orders?.edges?.[0];
   if (!customerEdge || !orderEdge) return null;
 
@@ -101,7 +150,6 @@ async function getLatestOrderStatusByPhone(phone) {
  * recent orders. Returns { found: false } when there's no matching customer.
  */
 async function getCustomerSummaryByPhone(phone) {
-  const api = client();
   const query = `
     query CustomerSummary($searchQuery: String!) {
       customers(first: 1, query: $searchQuery) {
@@ -127,12 +175,9 @@ async function getCustomerSummaryByPhone(phone) {
     }
   `;
 
-  const { data } = await api.post('/graphql.json', {
-    query,
-    variables: { searchQuery: `phone:${toE164(phone)}` },
-  });
+  const data = await graphql(query, { searchQuery: `phone:${toE164(phone)}` });
 
-  const node = data?.data?.customers?.edges?.[0]?.node;
+  const node = data?.customers?.edges?.[0]?.node;
   if (!node) return { found: false };
 
   const orders = (node.orders?.edges || []).map((e) => ({

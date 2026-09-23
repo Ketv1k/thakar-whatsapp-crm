@@ -54,9 +54,17 @@ npm install
    Meta's `X-Hub-Signature-256` on every incoming POST and reject forged requests. If you leave it blank
    the server still runs but logs a warning and accepts unauthenticated webhooks — set it before going live.
 
-### 3. Get your Shopify Admin API token
-Shopify Admin → Settings → Apps and sales channels → Develop apps → Create an app →
-give it `read_customers` and `read_orders` scopes → install it → copy the Admin API access token.
+### 3. Connect Shopify
+Either of these works — pick one:
+
+- **Dev Dashboard app (recommended):** at [dev.shopify.com](https://dev.shopify.com), create an app,
+  release a version with read scopes for orders, customers and products, and install it on your store.
+  Copy its **Client ID** and **Client secret** into `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET`.
+  The server exchanges them for an access token and renews it automatically every 24 hours.
+  (The app and store must belong to the same Shopify organization.)
+- **Store-admin custom app:** Shopify Admin → Settings → Apps and sales channels → Develop apps →
+  Create an app → add `read_customers` and `read_orders` scopes → install → copy the permanent
+  Admin API access token (`shpat_…`) into `SHOPIFY_ADMIN_API_TOKEN`.
 
 ### 4. Configure environment
 ```
