@@ -15,6 +15,9 @@ async function start() {
   startSlaCheckJob();
   app.listen(PORT, () => {
     console.log(`[server] Thakar WhatsApp CRM listening on port ${PORT}`);
+    if (process.env.TEST_MODE === 'true') {
+      console.log('[server] TEST MODE is on: WhatsApp messages are logged, not sent');
+    }
   });
 }
 

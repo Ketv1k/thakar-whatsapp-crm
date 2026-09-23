@@ -33,6 +33,7 @@
         <button id="profile-button" class="icon-btn hidden" aria-label="View customer">&#128100;</button>
         <button id="refresh-button" class="icon-btn" aria-label="Refresh">↻</button>
       </div>
+      <div id="test-banner" class="test-banner hidden">Test mode: nothing is sent on WhatsApp</div>
 
       <!-- List view (tickets or chats) -->
       <div id="list-view">
@@ -59,12 +60,18 @@
         <div id="profile-body"></div>
       </div>
 
+      <!-- Customer-message simulator (test mode only) -->
+      <div id="test-screen" class="screen hidden">
+        <div id="test-body"></div>
+      </div>
+
       <div class="bottom-nav">
         <button id="nav-tickets" class="active">
           <span class="nav-label">Tickets</span>
           <span id="tickets-count" class="count hidden">0</span>
         </button>
         <button id="nav-chats"><span class="nav-label">Chats</span></button>
+        <button id="nav-test" class="hidden"><span class="nav-label">Test</span></button>
       </div>
     </div>
 

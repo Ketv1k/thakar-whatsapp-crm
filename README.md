@@ -102,6 +102,25 @@ Run the unit tests (triage rules + webhook signature verification) with:
 npm test
 ```
 
+## Test mode (try it before WhatsApp is connected)
+
+Set `TEST_MODE=true` and:
+- the inbox shows a yellow "Test mode" banner and a **Test** tab;
+- in the Test tab you pick one of your real Shopify customers (or type any number), choose or
+  type their message, and see exactly what happens: auto-answered from Shopify, a ticket
+  created, or added to Chats, plus the reply the customer *would* receive;
+- **nothing is ever sent on WhatsApp**: every outgoing message is saved and logged
+  (`[test mode] not sent to …`) instead.
+
+Turn it off (`TEST_MODE=false` or remove it) once WhatsApp is connected.
+
+## Deploy on Render
+
+`render.yaml` is a Render Blueprint. In Render: **New → Blueprint** → pick this repo → paste the
+secret values it asks for (`INBOX_API_KEY`, `MONGODB_URI`, `SHOPIFY_CLIENT_ID`,
+`SHOPIFY_CLIENT_SECRET`) → **Apply**. It starts on the free plan in test mode; switch the plan to
+Starter and remove `TEST_MODE` when going live with WhatsApp.
+
 ## Production hardening (built in)
 - **Webhook authenticity** — every `POST /webhook` is checked against Meta's `X-Hub-Signature-256`
   using `WHATSAPP_APP_SECRET` (fails closed when the secret is set). The `GET` handshake still uses

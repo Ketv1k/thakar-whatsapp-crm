@@ -54,6 +54,10 @@ const profileButton = el('profile-button');
 const profileScreen = el('profile-screen');
 const profileBody = el('profile-body');
 const ticketsCountEl = el('tickets-count');
+const testBanner = el('test-banner');
+const testScreen = el('test-screen');
+const testBody = el('test-body');
+const navTest = el('nav-test');
 
 // ---------- API helper ----------
 async function api(path, options = {}) {
@@ -70,7 +74,15 @@ async function api(path, options = {}) {
     showLogin();
     throw new Error('Unauthorized');
   }
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  if (!res.ok) {
+    let message = `Request failed: ${res.status}`;
+    try {
+      message = (await res.json()).error || message;
+    } catch (err) {
+      /* non-JSON error body */
+    }
+    throw new Error(message);
+  }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
@@ -110,6 +122,9 @@ async function loadConfig() {
   try {
     const cfg = await api('/api/config');
     if (cfg && cfg.slaHours) slaHours = cfg.slaHours;
+    const testMode = !!(cfg && cfg.testMode);
+    testBanner.classList.toggle('hidden', !testMode);
+    navTest.classList.toggle('hidden', !testMode);
   } catch (err) {
     /* keep default */
   }
@@ -118,6 +133,7 @@ async function loadConfig() {
 // ---------- Tabs & navigation ----------
 el('nav-tickets').addEventListener('click', () => switchTab('tickets'));
 el('nav-chats').addEventListener('click', () => switchTab('chats'));
+navTest.addEventListener('click', () => switchTab('test'));
 backButton.addEventListener('click', () => {
   // From a profile, "back" returns to the conversation it was opened from.
   if (!profileScreen.classList.contains('hidden') && currentThread) {
@@ -132,6 +148,7 @@ profileButton.addEventListener('click', () => {
 el('refresh-button').addEventListener('click', () => {
   if (!profileScreen.classList.contains('hidden') && currentThread) showProfile(currentThread.data.customerPhone);
   else if (currentThread) openThread(currentThread.kind, currentThread.id);
+  else if (currentTab === 'test') renderTestScreen(true);
   else loadList();
 });
 
@@ -149,8 +166,16 @@ function switchTab(tab) {
   currentTab = tab;
   el('nav-tickets').classList.toggle('active', tab === 'tickets');
   el('nav-chats').classList.toggle('active', tab === 'chats');
+  navTest.classList.toggle('active', tab === 'test');
   closeThread();
-  loadList();
+  if (tab === 'test') {
+    listView.classList.add('hidden');
+    testScreen.classList.remove('hidden');
+    renderTestScreen();
+    return Promise.resolve();
+  }
+  testScreen.classList.add('hidden');
+  return loadList();
 }
 
 // ---------- List screen ----------
@@ -567,6 +592,137 @@ async function sendReply() {
   }
 }
 
+// ---------- Test mode: pretend to be a customer ----------
+const TEST_SAMPLES = [
+  ['Order status', 'Hi, where is my order?'],
+  ['Damaged', 'My order arrived but one container was broken and leaking'],
+  ['Missing item', 'One item is missing from my box'],
+  ['Wrong item', 'You sent me the wrong item'],
+  ['Refund', 'I want a refund for my last order'],
+  ['Late delivery', "It's been 5 days and my order is still not delivered yet"],
+  ['General question', 'Do you have Jain options without onion and garlic?'],
+];
+let testCustomers = null;
+
+async function renderTestScreen(reload = false) {
+  topbarTitle.textContent = 'Test';
+  topbarSubtitle.classList.add('hidden');
+  testBody.innerHTML = `
+    <p class="test-intro">Pretend a customer just messaged you on WhatsApp and see exactly what your inbox does. Nothing is sent to anyone.</p>
+    <div class="test-field">
+      <label for="test-customer">Customer</label>
+      <select id="test-customer"><option>Loading your Shopify customers…</option></select>
+    </div>
+    <div id="test-custom" class="test-field hidden">
+      <input id="test-phone" inputmode="numeric" placeholder="Phone with country code, e.g. 919876543210">
+      <input id="test-name" placeholder="Their name (optional)">
+    </div>
+    <div class="test-field">
+      <label for="test-text">Their message</label>
+      <div id="test-chips" class="test-chips"></div>
+      <textarea id="test-text" rows="3" placeholder="Type what the customer says, or tap an example above"></textarea>
+    </div>
+    <div class="test-actions">
+      <button id="test-send" class="test-send">Send as customer</button>
+      <button id="test-photo" class="test-photo">Send a photo</button>
+    </div>
+    <div id="test-result"></div>`;
+
+  for (const [label, text] of TEST_SAMPLES) {
+    const chip = document.createElement('button');
+    chip.textContent = label;
+    chip.addEventListener('click', () => {
+      el('test-text').value = text;
+    });
+    el('test-chips').appendChild(chip);
+  }
+  el('test-send').addEventListener('click', () => sendTestMessage('text'));
+  el('test-photo').addEventListener('click', () => sendTestMessage('image'));
+
+  if (!testCustomers || reload) {
+    try {
+      testCustomers = await api('/api/test/customers');
+    } catch (err) {
+      testCustomers = [];
+    }
+  }
+  const select = el('test-customer');
+  if (!select) return; // user left the Test tab while loading
+  select.innerHTML =
+    testCustomers
+      .map((c, i) => {
+        const orders = `${c.ordersCount} order${c.ordersCount === 1 ? '' : 's'}`;
+        return `<option value="${i}">${escapeHtml(c.name || 'Customer')} · …${c.phone.slice(-4)} · ${orders}</option>`;
+      })
+      .join('') + '<option value="custom">Someone else (type a number)</option>';
+  const syncCustom = () => el('test-custom').classList.toggle('hidden', select.value !== 'custom');
+  select.addEventListener('change', syncCustom);
+  syncCustom();
+}
+
+async function sendTestMessage(type) {
+  const choice = el('test-customer').value;
+  const customer = choice === 'custom' ? null : testCustomers[Number(choice)];
+  const body = {
+    type,
+    phone: customer ? customer.phone : el('test-phone').value,
+    name: customer ? customer.name : el('test-name').value,
+    text: el('test-text').value,
+  };
+  const resultEl = el('test-result');
+  el('test-send').disabled = true;
+  el('test-photo').disabled = true;
+  resultEl.innerHTML = '<div class="test-result">Sending…</div>';
+
+  try {
+    const r = await api('/api/test/simulate', { method: 'POST', body: JSON.stringify(body) });
+    renderTestResult(r);
+    if (type === 'text') el('test-text').value = '';
+    const open = await api('/api/tickets');
+    updateTicketBadge(open.length);
+  } catch (err) {
+    resultEl.innerHTML = `<div class="test-result error">${escapeHtml(err.message)}</div>`;
+  } finally {
+    if (el('test-send')) el('test-send').disabled = false;
+    if (el('test-photo')) el('test-photo').disabled = false;
+  }
+}
+
+function renderTestResult(r) {
+  const issue = ISSUE_LABELS[r.issueType] || r.issueType;
+  const outcome = {
+    auto_answered: 'Answered automatically from Shopify. No work for you.',
+    ticket_created: `Ticket #${r.ticketNumber} created (${issue}). It's waiting in your Tickets tab.`,
+    added_to_ticket: `Added to their open Ticket #${r.ticketNumber}.`,
+    chat: 'Added to your Chats for you to reply.',
+  }[r.outcome];
+  const replies = r.replies.length
+    ? '<div class="would-receive">The customer would receive</div>' +
+      r.replies.map((t) => `<div class="reply">${escapeHtml(t)}</div>`).join('')
+    : '<div class="would-receive">No automatic reply</div>';
+  const isTicket = !!r.ticketId;
+
+  el('test-result').innerHTML = `
+    <div class="test-result ok">
+      <div class="outcome">${escapeHtml(outcome)}</div>
+      ${replies}
+      <button id="test-open" class="open-btn">${isTicket ? 'Open the ticket' : 'Open the chat'}</button>
+    </div>`;
+  el('test-open').addEventListener('click', async () => {
+    if (isTicket) {
+      ticketFilter = 'open';
+      for (const b of ticketFilterEl.querySelectorAll('button')) {
+        b.classList.toggle('active', b.dataset.filter === 'open');
+      }
+      await switchTab('tickets');
+      openThread('ticket', r.ticketId);
+    } else {
+      await switchTab('chats');
+      openThread('chat', r.conversationId);
+    }
+  });
+}
+
 // ---------- Utilities ----------
 function statusLabel(status) {
   return STATUS_LABELS[status] || status;
@@ -608,7 +764,7 @@ if (apiKey) {
 // Poll for updates every 25s while looking at a list (cheap, avoids needing websockets).
 setInterval(() => {
   const loggedIn = loginScreen.classList.contains('hidden');
-  if (apiKey && loggedIn && !currentThread) {
+  if (apiKey && loggedIn && !currentThread && currentTab !== 'test') {
     loadList();
   }
 }, 25000);

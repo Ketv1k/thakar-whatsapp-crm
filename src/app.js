@@ -45,6 +45,11 @@ app.use('/api', apiJson, requireInboxAuth, inboxRoutes);
 app.use('/api/tickets', apiJson, requireInboxAuth, ticketRoutes);
 app.use('/api/customers', apiJson, requireInboxAuth, customerRoutes);
 
+// Customer-message simulator; only exists while TEST_MODE=true.
+if (process.env.TEST_MODE === 'true') {
+  app.use('/api/test', apiJson, requireInboxAuth, require('./routes/testMode'));
+}
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // Central error handler. Keeps the API from crashing/hanging on bad input and

@@ -198,6 +198,30 @@ async function getCustomerSummaryByPhone(phone) {
   };
 }
 
+// Recent customers who have ordered and have a phone on file - used by test
+// mode's "pretend to be a real customer" picker.
+async function listRecentCustomersWithPhone(limit = 15) {
+  const data = await graphql(
+    `query RecentCustomers {
+      customers(first: 50, sortKey: UPDATED_AT, reverse: true, query: "orders_count:>0") {
+        edges { node { displayName phone numberOfOrders } }
+      }
+    }`,
+    {}
+  );
+  const seen = new Set();
+  return (data?.customers?.edges || [])
+    .map((e) => e.node)
+    .filter((c) => c.phone)
+    .map((c) => ({
+      name: c.displayName || '',
+      phone: c.phone.replace(/\D/g, ''),
+      ordersCount: Number(c.numberOfOrders || 0),
+    }))
+    .filter((c) => !seen.has(c.phone) && seen.add(c.phone))
+    .slice(0, limit);
+}
+
 // Turns a lookup result into a short, friendly WhatsApp reply.
 function composeStatusReplyText(orderInfo) {
   if (!orderInfo) {
@@ -216,6 +240,7 @@ function composeStatusReplyText(orderInfo) {
 module.exports = {
   getLatestOrderStatusByPhone,
   getCustomerSummaryByPhone,
+  listRecentCustomersWithPhone,
   composeStatusReplyText,
   toE164,
 };

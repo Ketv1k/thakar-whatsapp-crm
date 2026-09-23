@@ -178,3 +178,4 @@ async function createTicketForConversation({ conversation, fromPhone, issueType,
 }
 
 module.exports = router;
+module.exports.handleIncomingMessage = handleIncomingMessage;

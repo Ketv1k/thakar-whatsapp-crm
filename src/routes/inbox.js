@@ -10,7 +10,10 @@ const router = express.Router();
 
 // Small config the Founder Inbox reads once (e.g. to flag tickets past SLA).
 router.get('/config', (req, res) => {
-  res.json({ slaHours: Number(process.env.SLA_HOURS || 6) });
+  res.json({
+    slaHours: Number(process.env.SLA_HOURS || 6),
+    testMode: process.env.TEST_MODE === 'true',
+  });
 });
 
 // General chats only - anything with an active ticket lives in the Tickets tab instead,

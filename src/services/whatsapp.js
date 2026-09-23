@@ -21,10 +21,22 @@ function client() {
   });
 }
 
+// TEST_MODE=true lets the whole app be tried out before WhatsApp is connected:
+// every outgoing message is logged instead of sent, and a fake id returned.
+function testMode() {
+  return process.env.TEST_MODE === 'true';
+}
+
+function notSent(toPhone, what) {
+  console.log(`[test mode] not sent to …${String(toPhone).slice(-4)}: ${what}`);
+  return { messages: [{ id: `wamid.TEST.${Date.now()}` }] };
+}
+
 // Free-form text reply. Only works inside the 24-hour customer service window,
 // i.e. after the customer has messaged you (which is true for everything in
 // this triage flow - replies, acknowledgments, SLA context).
 async function sendTextMessage(toPhone, body) {
+  if (testMode()) return notSent(toPhone, body);
   const api = client();
   const { data } = await api.post('/messages', {
     messaging_product: 'whatsapp',
@@ -39,6 +51,7 @@ async function sendTextMessage(toPhone, body) {
 // outside the 24h window - order/shipping updates, broadcasts, cart recovery.
 // `components` follows Meta's template component format (for {{1}} style variables).
 async function sendTemplateMessage(toPhone, templateName, languageCode = 'en', components = []) {
+  if (testMode()) return notSent(toPhone, `[template ${templateName}]`);
   const api = client();
   const { data } = await api.post('/messages', {
     messaging_product: 'whatsapp',
@@ -54,6 +67,7 @@ async function sendTemplateMessage(toPhone, templateName, languageCode = 'en', c
 }
 
 async function markMessageRead(waMessageId) {
+  if (testMode()) return;
   const api = client();
   await api.post('/messages', {
     messaging_product: 'whatsapp',
