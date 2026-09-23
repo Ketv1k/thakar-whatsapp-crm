@@ -180,7 +180,7 @@ async function marketing(kind) {
   await busy(async () => {
     const r = await post(`/api/test/${kind}`, { ...w, optIn, product: el('test-product').value });
     const sentText = {
-      cart: 'Cart reminder sent, with the link back to their cart.',
+      cart: 'Cart reminder sent, with the link that reopens their order in Magic Checkout.',
       reorder: 'Reorder reminder sent for their order from 3 weeks ago.',
       restock: 'Back-in-stock message sent.',
     }[kind];
@@ -231,7 +231,7 @@ export async function showTest() {
 
       <section class="card test-card">
         <h2>Reminders and alerts</h2>
-        <label class="inline"><input id="test-optin" type="checkbox" checked /> This customer opted in to offers</label>
+        <label class="inline"><input id="test-optin" type="checkbox" checked /> This customer said yes to WhatsApp messages (at checkout, or opted in to offers)</label>
         <div class="test-actions">
           <button type="button" class="btn" id="test-cart">They leave a cart</button>
           <button type="button" class="btn" id="test-reorder">Their order shipped 3 weeks ago</button>

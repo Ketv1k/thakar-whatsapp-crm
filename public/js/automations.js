@@ -30,7 +30,7 @@ const CARDS = [
     id: 'cart',
     icon: 'cart',
     title: 'Abandoned cart',
-    desc: 'One reminder with the link back to their cart, a while after someone leaves checkout. Only for customers who opted in to offers.',
+    desc: 'One reminder a while after someone leaves Magic Checkout, with a link that reopens their order in Magic Checkout. Only for customers who said yes to WhatsApp messages at checkout, or opted in to offers.',
     keys: [['abandoned_cart', 'Send cart reminders']],
     previewKey: 'abandoned_cart',
     option: { key: 'abandoned_cart', name: 'delayMinutes', label: 'Send after', choices: [[30, '30 minutes'], [60, '1 hour'], [180, '3 hours'], [360, '6 hours']] },

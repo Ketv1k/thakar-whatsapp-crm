@@ -225,6 +225,53 @@ test('no cart reminder without opt-in, after an order, twice a day, or at night'
   assert.equal(cartRecovery.decide(cart(), cartCtx({ automation: off() })).action, 'wait');
 });
 
+test('Magic Checkout carts link back into Magic Checkout on the shop\'s own domain', () => {
+  const store = 'https://thakarkitchen.com';
+  const node = {
+    id: 'gid://shopify/AbandonedCheckout/1',
+    abandonedCheckoutUrl: 'https://thakarkitchen.com/123/checkouts/ac/abc/recover?key=k',
+    customer: { firstName: 'Riya', phone: null },
+    shippingAddress: null,
+    customAttributes: [
+      { key: 'magic_checkout_url', value: 'https://esdjn0-th.myshopify.com/cart?magic_order_id=order_TfVyvTRbSrxmon' },
+      { key: 'checkout_whatsapp_consent', value: 'true' },
+      { key: 'drop_off_step', value: 'Payment Attempted' },
+      { key: 'contact', value: '+91 98765 43210' },
+    ],
+    lineItems: { edges: [{ node: { title: 'Dal Dhokali', quantity: 2, variant: { id: 'gid://shopify/ProductVariant/111' } } }] },
+    createdAt: '2026-09-23T06:00:00Z',
+  };
+  const c = cartRecovery.mapCheckout(node, store);
+  assert.equal(c.url, 'https://thakarkitchen.com/cart?magic_order_id=order_TfVyvTRbSrxmon');
+  assert.equal(c.linkType, 'magic');
+  assert.equal(c.whatsappConsent, true);
+  assert.equal(c.dropOffStep, 'Payment Attempted');
+  assert.equal(c.phone, '919876543210'); // from Magic's contact field
+  assert.equal(c.shopifyUrl, node.abandonedCheckoutUrl);
+
+  // No Magic link: the cart page with the same products (Checkout there opens Magic).
+  const plain = { ...node, customAttributes: [] };
+  const variants = { edges: [
+    { node: { title: 'A', quantity: 2, variant: { id: 'gid://shopify/ProductVariant/111' } } },
+    { node: { title: 'B', quantity: 1, variant: { id: 'gid://shopify/ProductVariant/222' } } },
+  ] };
+  assert.deepEqual(cartRecovery.recoveryLink({ ...plain, lineItems: variants }, store), {
+    url: 'https://thakarkitchen.com/cart/111:2,222:1?storefront=true',
+    linkType: 'cart',
+  });
+  // Nothing better: Shopify's own link.
+  assert.equal(cartRecovery.recoveryLink({ ...plain, lineItems: { edges: [{ node: { title: 'C', quantity: 1, variant: null } }] } }, store).linkType, 'shopify');
+  assert.equal(cartRecovery.mapCheckout({ ...plain, customAttributes: [{ key: 'checkout_whatsapp_consent', value: 'false' }] }, store).whatsappConsent, false);
+});
+
+test('consent given at checkout counts for the cart reminder; a no or a STOP always wins', () => {
+  const ctx = cartCtx({ optedIn: false });
+  assert.equal(cartRecovery.decide(cart({ whatsappConsent: true }), ctx).action, 'send');
+  assert.equal(cartRecovery.decide(cart({ whatsappConsent: null }), ctx).reason, 'Not opted in to offers');
+  assert.equal(cartRecovery.decide(cart({ whatsappConsent: false }), cartCtx({ optedIn: true })).reason, 'Said no to WhatsApp messages at checkout');
+  assert.equal(cartRecovery.decide(cart({ whatsappConsent: true }), cartCtx({ optedIn: false, optedOut: true })).reason, 'They replied STOP');
+});
+
 test('cart items read naturally', () => {
   assert.equal(cartRecovery.itemsLabel(['Kaju Curry']), 'Kaju Curry');
   assert.equal(cartRecovery.itemsLabel(['Kaju Curry', 'Dal Tadka']), 'Kaju Curry and Dal Tadka');

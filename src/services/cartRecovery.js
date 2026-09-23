@@ -16,16 +16,63 @@ const HOUR = 60 * 60 * 1000;
 // Reminders only for carts left in the last day; older ones are stale.
 const MAX_AGE = 24 * HOUR;
 
-function mapCheckout(node) {
+function attribute(node, key) {
+  const a = (node.customAttributes || []).find((x) => x.key === key);
+  return a ? String(a.value == null ? '' : a.value) : null;
+}
+
+function numericId(gid) {
+  const id = String(gid || '').split('/').pop();
+  return /^\d+$/.test(id) ? id : null;
+}
+
+/**
+ * The best link back to this cart, for this store:
+ *  - Razorpay Magic Checkout records its own recovery link
+ *    (".../cart?magic_order_id=..."); opening it reopens the order in Magic
+ *    Checkout. It's rewritten onto the shop's own domain.
+ *  - Otherwise a cart link with the same products that opens the cart page
+ *    (?storefront=true), where the usual Checkout button works - including
+ *    Magic Checkout.
+ *  - Otherwise Shopify's own checkout link.
+ * Pure. Returns { url, linkType }.
+ */
+function recoveryLink(node, storeUrl) {
+  const magic = attribute(node, 'magic_checkout_url');
+  if (magic) {
+    try {
+      const orderId = new URL(magic).searchParams.get('magic_order_id');
+      if (orderId && /^[\w-]{4,80}$/.test(orderId)) {
+        return { url: `${storeUrl}/cart?magic_order_id=${encodeURIComponent(orderId)}`, linkType: 'magic' };
+      }
+    } catch (err) {
+      /* not a URL: fall through */
+    }
+  }
+  const items = (node.lineItems?.edges || []).map((e) => ({ id: numericId(e.node.variant?.id), qty: Number(e.node.quantity) || 1 }));
+  if (items.length && items.every((i) => i.id)) {
+    return { url: `${storeUrl}/cart/${items.map((i) => `${i.id}:${i.qty}`).join(',')}?storefront=true`, linkType: 'cart' };
+  }
+  return { url: node.abandonedCheckoutUrl || null, linkType: node.abandonedCheckoutUrl ? 'shopify' : null };
+}
+
+function mapCheckout(node, storeUrl = shopify.storeUrl()) {
   const items = (node.lineItems?.edges || []).map((e) => e.node.title).filter(Boolean);
+  const consent = attribute(node, 'checkout_whatsapp_consent');
+  const link = recoveryLink(node, storeUrl);
   return {
     shopifyId: node.id,
     phone:
       normalizePhone(node.customer?.phone) ||
       normalizePhone(node.shippingAddress?.phone) ||
-      normalizePhone(node.billingAddress?.phone),
+      normalizePhone(node.billingAddress?.phone) ||
+      normalizePhone(attribute(node, 'contact')),
     firstName: (node.customer?.firstName || node.shippingAddress?.firstName || '').trim(),
-    url: node.abandonedCheckoutUrl || null,
+    url: link.url,
+    linkType: link.linkType,
+    shopifyUrl: node.abandonedCheckoutUrl || null,
+    whatsappConsent: consent === 'true' ? true : consent === 'false' ? false : null,
+    dropOffStep: attribute(node, 'drop_off_step') || null,
     total: Number(node.totalPriceSet?.shopMoney?.amount || 0),
     currency: node.totalPriceSet?.shopMoney?.currencyCode || 'INR',
     items,
@@ -46,7 +93,7 @@ function itemsLabel(items) {
 /**
  * Pure: should this cart get its reminder now?
  * Returns { action: 'send' | 'wait' | 'skip', reason }.
- * ctx: { automation, optedIn, orderedSince, recentReminder, now, ignoreQuietHours }
+ * ctx: { automation, optedIn, optedOut, orderedSince, recentReminder, now, ignoreQuietHours }
  */
 function decide(checkout, ctx) {
   const now = ctx.now || new Date();
@@ -65,7 +112,11 @@ function decide(checkout, ctx) {
   if (!checkout.phone) return { action: 'skip', reason: 'No phone number' };
   if (!checkout.url) return { action: 'skip', reason: 'No cart link' };
   if (ctx.orderedSince) return { action: 'skip', reason: 'They placed an order' };
-  if (!ctx.optedIn) return { action: 'skip', reason: 'Not opted in to offers' };
+  // Permission: the WhatsApp consent they gave at checkout, or a general
+  // opt-in to offers. A "no" at checkout or a STOP always wins.
+  if (ctx.optedOut) return { action: 'skip', reason: 'They replied STOP' };
+  if (checkout.whatsappConsent === false) return { action: 'skip', reason: 'Said no to WhatsApp messages at checkout' };
+  if (!ctx.optedIn && checkout.whatsappConsent !== true) return { action: 'skip', reason: 'Not opted in to offers' };
   if (ctx.recentReminder) return { action: 'skip', reason: 'Already reminded in the last day' };
   if (!ctx.ignoreQuietHours && isQuietTime(now)) return { action: 'wait', reason: 'Night time: waits until morning' };
   return { action: 'send', reason: '' };
@@ -87,8 +138,9 @@ async function syncCheckouts() {
             customer { firstName phone }
             shippingAddress { phone firstName }
             billingAddress { phone }
+            customAttributes { key value }
             totalPriceSet { shopMoney { amount currencyCode } }
-            lineItems(first: 5) { edges { node { title } } }
+            lineItems(first: 20) { edges { node { title quantity variant { id } } } }
           } }
         }
       }`,
@@ -110,7 +162,7 @@ async function syncCheckouts() {
 
 async function remind(checkout, automation, { now = new Date(), ignoreQuietHours = false } = {}) {
   const [customer, orderedSince, recentReminder] = await Promise.all([
-    checkout.phone ? Customer.findOne({ phone: checkout.phone }).select('optedInMarketing name').lean() : null,
+    checkout.phone ? Customer.findOne({ phone: checkout.phone }).select('optedInMarketing optedOutAt name').lean() : null,
     checkout.phone ? Order.exists({ phone: checkout.phone, placedAt: { $gte: checkout.checkoutCreatedAt } }) : null,
     checkout.phone
       ? AbandonedCheckout.exists({ phone: checkout.phone, remindStatus: 'sent', remindedAt: { $gte: new Date(now.getTime() - 24 * HOUR) } })
@@ -119,6 +171,7 @@ async function remind(checkout, automation, { now = new Date(), ignoreQuietHours
   const decision = decide(checkout, {
     automation,
     optedIn: !!(customer && customer.optedInMarketing),
+    optedOut: !!(customer && customer.optedOutAt && !customer.optedInMarketing),
     orderedSince: !!orderedSince,
     recentReminder: !!recentReminder,
     now,
@@ -181,4 +234,4 @@ async function run() {
   return { ...synced, ...sent };
 }
 
-module.exports = { mapCheckout, itemsLabel, decide, syncCheckouts, sendDueReminders, remind, run, MAX_AGE };
+module.exports = { mapCheckout, recoveryLink, itemsLabel, decide, syncCheckouts, sendDueReminders, remind, run, MAX_AGE };

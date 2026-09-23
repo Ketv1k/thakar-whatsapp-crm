@@ -7,7 +7,17 @@ const abandonedCheckoutSchema = new mongoose.Schema(
     shopifyId: { type: String, required: true, unique: true },
     phone: { type: String, default: null, index: true },
     firstName: { type: String, default: '' },
+    // The link sent to the customer (see cartRecovery.mapCheckout).
     url: String,
+    // 'magic' (reopens Razorpay Magic Checkout) | 'cart' (cart page with the
+    // items) | 'shopify' (Shopify's own checkout)
+    linkType: { type: String, default: null },
+    shopifyUrl: String,
+    // What the customer chose for WhatsApp messages at checkout (Magic
+    // Checkout records it): true / false / null when not asked.
+    whatsappConsent: { type: Boolean, default: null },
+    // Where they stopped, e.g. "Payment Attempted" (from Magic Checkout).
+    dropOffStep: { type: String, default: null },
     total: Number,
     currency: { type: String, default: 'INR' },
     items: [String],

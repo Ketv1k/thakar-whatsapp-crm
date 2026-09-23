@@ -299,16 +299,23 @@ Automations — they accepted marketing at checkout in Shopify. Replying **STOP*
 
 ## Cart, reorder and back-in-stock reminders
 
-- **Abandoned cart** — one reminder with the link back to the cart, 30 min to 6 hours after
-  someone leaves checkout (your choice); not if they ordered meanwhile, not twice a day. Orders
-  placed within 3 days count as recovered.
+- **Abandoned cart** — one reminder 30 min to 6 hours after someone leaves checkout (your
+  choice); not if they ordered meanwhile, not twice a day. Orders placed within 3 days count as
+  recovered. Built for **Razorpay Magic Checkout**: Magic records its own recovery link on the
+  Shopify abandoned checkout (`magic_checkout_url` → `/cart?magic_order_id=…`), which reopens the
+  order in Magic Checkout; the app sends that link on the shop's own domain. Without it, the link
+  opens the cart page with the same products (`/cart/<variant>:<qty>,…?storefront=true`), where the
+  Checkout button opens Magic as usual. It goes to customers who said yes to WhatsApp messages in
+  Magic Checkout (`checkout_whatsapp_consent`) or opted in to offers; a "no" at checkout or a STOP
+  always wins, and Magic's contact number is used when the cart has no other phone.
 - **Reorder reminders** — 14/21/30/45 days after an order ships, naming what they bought; skipped
   if they ordered again; at most one a month per customer.
 - **Back-in-stock** — on a customer's profile, search a product (or a sold-out size) they asked
   about; every half hour the app checks Shopify and messages everyone waiting once it's back.
 
-All three are marketing messages: opted-in customers only (back-in-stock needs only the
-customer's own request), never at night (`QUIET_HOURS`, default 9pm–9am India time).
+All three are marketing messages: opted-in customers only (cart reminders also accept the
+consent given at checkout; back-in-stock needs only the customer's own request), never at night
+(`QUIET_HOURS`, default 9pm–9am India time).
 
 ## Going live checklist
 

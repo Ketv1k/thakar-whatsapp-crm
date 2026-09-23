@@ -229,17 +229,21 @@ router.post('/order/:id/tap', asyncHandler(async (req, res) => {
   res.json({ cod: fresh.cod, ...(await whatWasSent(order.phone, since)) });
 }));
 
-// Someone left checkout (1 minute past the reminder delay).
+// Someone left Magic Checkout (1 minute past the reminder delay). "optIn"
+// here is the WhatsApp consent they gave at checkout.
 router.post('/cart', asyncHandler(async (req, res) => {
   const who = readCustomer(req.body);
-  await ensureCustomer(who, req.body.optIn === true);
+  await ensureCustomer(who, false);
   const automation = await automations.get('abandoned_cart');
   const createdAt = new Date(Date.now() - ((automation.options.delayMinutes || 60) + 1) * 60 * 1000);
   const checkout = await AbandonedCheckout.create({
     shopifyId: `test:${crypto.randomUUID()}`,
     phone: who.phone,
     firstName: who.name.split(' ')[0] || '',
-    url: 'https://thakarkitchen.com/cart',
+    url: 'https://thakarkitchen.com/cart?magic_order_id=order_TEST',
+    linkType: 'magic',
+    whatsappConsent: req.body.optIn === true,
+    dropOffStep: 'Contact and Address details entered',
     total: 545,
     items: ['Dal Dhokali', 'Kaju Gathiya', 'Methi Thepla'],
     checkoutCreatedAt: createdAt,
