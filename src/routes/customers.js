@@ -3,6 +3,7 @@ const Customer = require('../models/Customer');
 const Ticket = require('../models/Ticket');
 const shopify = require('../services/shopify');
 const customerStatus = require('../services/customerStatus');
+const { cleanTags } = require('../services/tags');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
@@ -50,6 +51,7 @@ router.get('/:phone', asyncHandler(async (req, res) => {
     phone,
     name: customer.name || shopifySummary.customerName || '',
     notes: customer.notes || '',
+    tags: customer.tags || [],
     optedInMarketing: !!customer.optedInMarketing,
     status,
     statusLabel: customerStatus.statusLabel(status),
@@ -58,13 +60,14 @@ router.get('/:phone', asyncHandler(async (req, res) => {
   });
 }));
 
-// Update the founder-editable bits of a profile (note, marketing opt-in).
+// Update the founder-editable bits of a profile (note, tags, marketing opt-in).
 router.patch('/:phone', asyncHandler(async (req, res) => {
   const phone = req.params.phone;
   if (!PHONE_RE.test(phone)) return res.status(400).json({ error: 'invalid phone' });
 
   const update = {};
   if (typeof req.body.notes === 'string') update.notes = req.body.notes.slice(0, 2000);
+  if (Array.isArray(req.body.tags)) update.tags = cleanTags(req.body.tags);
   if (typeof req.body.optedInMarketing === 'boolean') update.optedInMarketing = req.body.optedInMarketing;
   if (typeof req.body.name === 'string' && req.body.name.trim()) update.name = req.body.name.trim().slice(0, 120);
 
@@ -74,7 +77,13 @@ router.patch('/:phone', asyncHandler(async (req, res) => {
     { upsert: true, new: true }
   ).lean();
 
-  res.json({ phone, name: customer.name || '', notes: customer.notes || '', optedInMarketing: !!customer.optedInMarketing });
+  res.json({
+    phone,
+    name: customer.name || '',
+    notes: customer.notes || '',
+    tags: customer.tags || [],
+    optedInMarketing: !!customer.optedInMarketing,
+  });
 }));
 
 module.exports = router;

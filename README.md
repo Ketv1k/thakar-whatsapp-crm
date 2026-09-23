@@ -12,12 +12,18 @@ src/
   server.js           Standalone entry point (npm start) - connects DB, serves the PWA, starts the SLA job
   models/              Customer, Conversation, Message, Ticket (Mongoose)
   services/
-    whatsapp.js        Send/receive via Meta's WhatsApp Cloud API
+    whatsapp.js        Send/receive via Meta's WhatsApp Cloud API (+ download customers' photos/voice notes)
+    outbound.js         Every reply goes through here, so its delivery ticks can be tracked
+    deliveryStatus.js   Sent / delivered / read / failed ticks from WhatsApp's status webhooks
+    messageContent.js   Turns a WhatsApp message (text, photo, voice note, file...) into what the inbox shows
+    replyWindow.js      WhatsApp's 24-hour free-reply window
+    inboxView.js        The chat list (search, filters), one chat, and the Home dashboard numbers
+    founderReply.js     Your reply from the inbox (moves the ticket to "You replied")
     shopify.js          Look up a customer's latest order by phone (Shopify Admin GraphQL)
     ticketTriage.js     The keyword logic that decides: auto-answer / create ticket / leave as general chat
   routes/
-    webhook.js          Receives WhatsApp messages, runs triage
-    inbox.js             General chat list + reply + "flag as ticket" escape hatch
+    webhook.js          Receives WhatsApp messages and delivery ticks, runs triage
+    inbox.js             Home dashboard, the one inbox, replies, media, "flag as ticket" escape hatch
     tickets.js            Ticket list + reply + resolve
   jobs/slaCheck.js      Hourly cron: pings you on WhatsApp if a ticket's been open 6+ hours
 public/                 Founder Inbox - mobile-first PWA (installable, "Add to Home Screen")
@@ -32,7 +38,7 @@ public/                 Founder Inbox - mobile-first PWA (installable, "Add to H
    instant acknowledgment with a ticket number (plus a photo or transaction-reference request where it helps).
 4. Anything else → the customer gets an instant acknowledgment that fits what they sent
    (greeting, product question, bulk order, delivery area, compliment, photo, voice note, or a
-   general "we've received it"), and the message waits in the Chats tab for you. "ok"/"thanks",
+   general "we've received it"), and the message waits in the Inbox (marked "Needs reply") for you. "ok"/"thanks",
    emoji-only messages, reactions and stickers get no reply; the same kind of acknowledgment isn't
    repeated within `ACK_COOLDOWN_HOURS`, and none are sent while you're talking to that customer.
    Wording and keywords live in `src/services/autoAck.js`.
@@ -134,10 +140,12 @@ Choose any model with environment variables (no key = AI answers off):
 ## Test mode (try it before WhatsApp is connected)
 
 Set `TEST_MODE=true` and:
-- the inbox shows a yellow "Test mode" banner and a **Test** tab;
-- in the Test tab you pick one of your real Shopify customers (or type any number), choose or
-  type their message, and see exactly what happens: auto-answered from Shopify, a ticket
-  created, or added to Chats, plus the reply the customer *would* receive;
+- the inbox shows a "Test mode" label and a **Test** page;
+- on the Test page you pick one of your real Shopify customers (or type any number), choose or
+  type their message (or send a photo / voice note), and see exactly what happens:
+  auto-answered from Shopify, a ticket created, or waiting in the Inbox, plus the reply the
+  customer *would* receive. Test photos and voice notes show a stand-in picture and a short tune.
+  When a test customer writes back, your earlier replies get blue "read" ticks, as on WhatsApp;
 - **nothing is ever sent on WhatsApp**: every outgoing message is saved and logged
   (`[test mode] not sent to …`) instead.
 
@@ -166,9 +174,27 @@ Starter and remove `TEST_MODE` when going live with WhatsApp.
 > signature. Don't run a global `express.json()` ahead of these routes — let this app's own scoped
 > parsers handle body parsing (they capture the raw bytes for you).
 
+## The inbox
+
+- **Home** — today at a glance: open tickets (and which are overdue), chats waiting for a
+  reply, how many were answered for you automatically, and a "Needs your attention" list with
+  the most urgent first.
+- **Inbox** — one list with every customer, newest first. Search by name, part of a number,
+  tag or ticket number (`#1042`); filter to **Needs reply** or **Tickets**. A ticket is a label
+  on the customer's chat, not a separate list.
+- **Chats** show photos (tap to enlarge), play voice notes, offer files as downloads, and show
+  WhatsApp ticks on your replies: one grey tick sent, two grey delivered, two blue read (or
+  "Not delivered" with WhatsApp's reason).
+- **Reply window** — WhatsApp only allows free-form replies for 24 hours after the customer's
+  last message. Every chat shows how long is left; once it closes the reply box explains why
+  it's locked instead of failing.
+- On a computer the list, chat and customer sit side by side (like WhatsApp Web); on a phone
+  it's one screen at a time with tabs at the bottom. `FOUNDER_NAME` sets the name in the
+  greeting.
+
 ## Customer profiles (CRM)
 
-Tap the person icon in any conversation to see a customer's full profile, assembled
+Next to each chat (or via the person icon on a phone) is the customer's profile, assembled
 automatically — no manual data entry:
 
 - **Automatic status** — New / Returning / VIP, worked out from their Shopify order
@@ -176,12 +202,12 @@ automatically — no manual data entry:
   `CRM_VIP_SPEND`).
 - **Order history + lifetime spend** — pulled live from Shopify.
 - **Past tickets** — every support issue this customer has raised.
-- **Private note** — the one thing you type: allergies, delivery preferences, "buys in
-  bulk", etc.
+- **Tags** — your own labels ("Jain", "Monthly", "Gifting"); searchable from the inbox.
+- **Private note** — allergies, delivery preferences, "buys in bulk", etc.
 - **Marketing opt-in** — toggle that will feed Phase 2 broadcasts.
 
 API: `GET /api/customers/:phone` returns the assembled profile; `PATCH /api/customers/:phone`
-updates the note / opt-in. Both require the Inbox API key.
+updates the note / tags / opt-in. Both require the Inbox API key.
 
 ## Not built yet (Phase 2 / 3, per our plan)
 - Marketing broadcasts to a customer segment

@@ -3,7 +3,9 @@ const Customer = require('../models/Customer');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const Ticket = require('../models/Ticket');
-const whatsapp = require('../services/whatsapp');
+const outbound = require('../services/outbound');
+const deliveryStatus = require('../services/deliveryStatus');
+const { describeInbound } = require('../services/messageContent');
 const shopify = require('../services/shopify');
 const triage = require('../services/ticketTriage');
 const autoAck = require('../services/autoAck');
@@ -28,18 +30,27 @@ router.post('/', async (req, res) => {
   // Always ack fast - Meta retries aggressively if you don't respond quickly.
   res.sendStatus(200);
 
-  try {
-    const entry = req.body?.entry?.[0];
-    const change = entry?.changes?.[0];
-    const value = change?.value;
-    const messages = value?.messages;
-    if (!messages || messages.length === 0) return; // e.g. a delivery/read status update, nothing to do
-
-    for (const waMessage of messages) {
-      await handleIncomingMessage(waMessage, value);
+  // One delivery can batch several entries/changes; each change carries
+  // customer messages and/or delivery ticks for messages we sent.
+  for (const entry of req.body?.entry || []) {
+    for (const change of entry?.changes || []) {
+      const value = change?.value;
+      if (!value) continue;
+      for (const status of value.statuses || []) {
+        try {
+          await deliveryStatus.applyStatus(status);
+        } catch (err) {
+          console.error('[webhook] error applying delivery status', err);
+        }
+      }
+      for (const waMessage of value.messages || []) {
+        try {
+          await handleIncomingMessage(waMessage, value);
+        } catch (err) {
+          console.error('[webhook] error handling incoming message', err);
+        }
+      }
     }
-  } catch (err) {
-    console.error('[webhook] error handling incoming message', err);
   }
 });
 
@@ -58,12 +69,8 @@ async function handleIncomingMessage(waMessage, value) {
   }
 
   const contactName = value?.contacts?.[0]?.profile?.name || '';
-  const text =
-    waMessage.type === 'text'
-      ? waMessage.text?.body || ''
-      : waMessage.type === 'image'
-      ? '[photo]'
-      : `[${waMessage.type}]`;
+  const content = describeInbound(waMessage);
+  const text = content.body;
 
   // 1. Find or create the customer + conversation
   const customer = await Customer.findOneAndUpdate(
@@ -86,8 +93,9 @@ async function handleIncomingMessage(waMessage, value) {
       conversationId: conversation._id,
       ticketId: conversation.activeTicketId || null,
       direction: 'inbound',
-      type: waMessage.type,
+      type: content.type,
       body: text,
+      media: content.media,
       waMessageId: waMessage.id,
     });
   } catch (err) {
@@ -96,22 +104,32 @@ async function handleIncomingMessage(waMessage, value) {
   }
 
   conversation.lastMessageAt = new Date();
-  conversation.lastMessagePreview = text.slice(0, 140);
+  conversation.lastInboundAt = conversation.lastMessageAt;
+  conversation.lastMessagePreview = content.preview;
   conversation.unread = true;
 
   // 3. If there's already an open ticket for this conversation, just append -
-  //    no new automated action, it's now a human conversation.
+  //    no new automated action, it's now a human conversation. The customer
+  //    has written again, so the ticket is back to waiting on the founder.
   if (conversation.activeTicketId) {
-    await Ticket.findByIdAndUpdate(conversation.activeTicketId, { lastActivityAt: new Date() });
+    await Ticket.findByIdAndUpdate(conversation.activeTicketId, { lastActivityAt: new Date(), status: 'open' });
     await conversation.save();
     return;
   }
 
-  // 4. No open ticket - run triage on plain text messages only. Photos, voice
-  //    notes etc. get an instant acknowledgment and wait in Chats.
-  if (waMessage.type !== 'text') {
+  // 4. No open ticket - run triage on plain text messages only. A photo whose
+  //    caption describes a problem ("box arrived broken") opens a ticket;
+  //    other photos, voice notes etc. get an instant acknowledgment and wait
+  //    in the inbox.
+  if (content.type !== 'text') {
+    const captionIssue = content.caption ? triage.detectIssueType(content.caption) : null;
+    if (captionIssue) {
+      await createTicketForConversation({ conversation, fromPhone, issueType: captionIssue });
+      await conversation.save();
+      return;
+    }
     await conversation.save();
-    await sendAutoAckIfDue(conversation, fromPhone, autoAck.categorize(waMessage.type, text));
+    await sendAutoAckIfDue(conversation, fromPhone, autoAck.categorize(content.type, text));
     return;
   }
 
@@ -120,14 +138,7 @@ async function handleIncomingMessage(waMessage, value) {
     try {
       const orderInfo = await shopify.getLatestOrderStatusByPhone(fromPhone);
       const replyText = shopify.composeStatusReplyText(orderInfo);
-      await whatsapp.sendTextMessage(fromPhone, replyText);
-      await Message.create({
-        conversationId: conversation._id,
-        direction: 'outbound',
-        type: 'text',
-        body: replyText,
-        autoAck: 'order_status',
-      });
+      await outbound.sendText({ conversationId: conversation._id, to: fromPhone, body: replyText, autoAck: 'order_status' });
       // Already answered - show the reply as the latest message and don't flag
       // the chat as needing the founder.
       conversation.lastMessagePreview = replyText.slice(0, 140);
@@ -178,14 +189,7 @@ async function answerWithAi({ conversation, fromPhone, text, category, inboundMe
   const result = await aiAnswer.answer(text, history.reverse());
   if (!result || !result.answered) return false;
 
-  await whatsapp.sendTextMessage(fromPhone, result.reply);
-  await Message.create({
-    conversationId: conversation._id,
-    direction: 'outbound',
-    type: 'text',
-    body: result.reply,
-    autoAck: 'ai_answer',
-  });
+  await outbound.sendText({ conversationId: conversation._id, to: fromPhone, body: result.reply, autoAck: 'ai_answer' });
   // Answered - show the reply as the latest message and don't flag the chat.
   conversation.lastMessagePreview = result.reply.slice(0, 140);
   conversation.unread = false;
@@ -213,14 +217,7 @@ async function sendAutoAckIfDue(conversation, fromPhone, category) {
   if (founderActive || alreadySent) return;
 
   const reply = autoAck.replyFor(category);
-  await whatsapp.sendTextMessage(fromPhone, reply);
-  await Message.create({
-    conversationId: conversation._id,
-    direction: 'outbound',
-    type: 'text',
-    body: reply,
-    autoAck: category,
-  });
+  await outbound.sendText({ conversationId: conversation._id, to: fromPhone, body: reply, autoAck: category });
 }
 
 async function createTicketForConversation({ conversation, fromPhone, issueType }) {
@@ -247,12 +244,10 @@ async function createTicketForConversation({ conversation, fromPhone, issueType 
   );
 
   const ackText = triage.acknowledgmentMessage(ticketNumber, issueType);
-  await whatsapp.sendTextMessage(fromPhone, ackText);
-  await Message.create({
+  await outbound.sendText({
     conversationId: conversation._id,
     ticketId: ticket._id,
-    direction: 'outbound',
-    type: 'text',
+    to: fromPhone,
     body: ackText,
     autoAck: 'ticket',
   });

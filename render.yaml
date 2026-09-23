@@ -17,6 +17,8 @@ services:
       # Remove (or set to "false") once WhatsApp is connected and you go live.
       - key: TEST_MODE
         value: "true"
+      - key: FOUNDER_NAME
+        value: Ketvik Thakar
       - key: INBOX_API_KEY
         sync: false
       - key: MONGODB_URI

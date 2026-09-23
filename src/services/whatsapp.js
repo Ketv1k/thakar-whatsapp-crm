@@ -1,9 +1,14 @@
 // Thin wrapper around Meta's WhatsApp Cloud API.
 // Docs: https://developers.facebook.com/docs/whatsapp/cloud-api
+const crypto = require('crypto');
 const axios = require('axios');
 
+function apiVersion() {
+  return process.env.WHATSAPP_API_VERSION || 'v20.0';
+}
+
 function client() {
-  const version = process.env.WHATSAPP_API_VERSION || 'v20.0';
+  const version = apiVersion();
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const token = process.env.WHATSAPP_TOKEN;
 
@@ -29,7 +34,8 @@ function testMode() {
 
 function notSent(toPhone, what) {
   console.log(`[test mode] not sent to …${String(toPhone).slice(-4)}: ${what}`);
-  return { messages: [{ id: `wamid.TEST.${Date.now()}` }] };
+  // Unique per message: outgoing ids share a unique index with incoming ones.
+  return { messages: [{ id: `wamid.TEST.${crypto.randomUUID()}` }] };
 }
 
 // Free-form text reply. Only works inside the 24-hour customer service window,
@@ -76,4 +82,71 @@ async function markMessageRead(waMessageId) {
   });
 }
 
-module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead };
+// Downloads a photo / voice note / file a customer sent. WhatsApp only gives a
+// media id in the webhook; the id is swapped for a short-lived URL, which is
+// then fetched with the same token. Returns { stream, mimeType, size }.
+// Media stays downloadable for about 30 days after it was sent.
+async function downloadMedia(mediaId, kind) {
+  if (testMode()) return testMedia(kind);
+  const token = process.env.WHATSAPP_TOKEN;
+  if (!token) throw new Error('WHATSAPP_TOKEN not configured');
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const { data: info } = await axios.get(
+    `https://graph.facebook.com/${apiVersion()}/${encodeURIComponent(mediaId)}`,
+    { headers, timeout: 10000 }
+  );
+  const file = await axios.get(info.url, { headers, responseType: 'stream', timeout: 30000 });
+  return {
+    stream: file.data,
+    mimeType: info.mime_type || file.headers['content-type'] || 'application/octet-stream',
+    size: Number(info.file_size || file.headers['content-length']) || null,
+  };
+}
+
+// Stand-ins for simulated photos and voice notes in test mode, so the inbox can
+// show and play them without WhatsApp: a labelled picture and a short tune.
+function testMedia(kind) {
+  const { Readable } = require('stream');
+  if (kind === 'audio') {
+    const buf = testTone();
+    return { stream: Readable.from([buf]), mimeType: 'audio/wav', size: buf.length };
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
+<rect width="640" height="480" fill="#E7D2AE"/>
+<rect x="200" y="150" width="240" height="150" rx="14" fill="none" stroke="#6B4E2A" stroke-width="10"/>
+<circle cx="260" cy="200" r="18" fill="#6B4E2A"/><path d="M210 290l80-70 60 50 40-30 50 50" fill="none" stroke="#6B4E2A" stroke-width="10"/>
+<text x="320" y="360" text-anchor="middle" font-family="sans-serif" font-size="30" font-weight="700" fill="#6B4E2A">Test photo</text>
+<text x="320" y="400" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#6B4E2A">A real customer photo shows here</text></svg>`;
+  const buf = Buffer.from(svg);
+  return { stream: Readable.from([buf]), mimeType: 'image/svg+xml', size: buf.length };
+}
+
+// ~3 seconds of a soft three-note tune as an 8 kHz mono WAV.
+function testTone() {
+  const rate = 8000;
+  const notes = [523.25, 659.25, 783.99];
+  const samples = rate * 3;
+  const buf = Buffer.alloc(44 + samples);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + samples, 4);
+  buf.write('WAVEfmt ', 8);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate, 28);
+  buf.writeUInt16LE(1, 32);
+  buf.writeUInt16LE(8, 34);
+  buf.write('data', 36);
+  buf.writeUInt32LE(samples, 40);
+  for (let i = 0; i < samples; i++) {
+    const t = i / rate;
+    const f = notes[Math.min(notes.length - 1, Math.floor(t))];
+    const envelope = Math.min(1, (t % 1) * 20) * (1 - (t % 1));
+    buf[44 + i] = Math.round(128 + 60 * envelope * Math.sin(2 * Math.PI * f * t));
+  }
+  return buf;
+}
+
+module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead, downloadMedia };

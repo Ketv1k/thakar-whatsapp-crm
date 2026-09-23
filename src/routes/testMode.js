@@ -7,6 +7,7 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const Ticket = require('../models/Ticket');
 const shopify = require('../services/shopify');
+const deliveryStatus = require('../services/deliveryStatus');
 const { handleIncomingMessage } = require('./webhook');
 const { asyncHandler } = require('../utils/asyncHandler');
 
@@ -27,7 +28,7 @@ router.get('/customers', asyncHandler(async (req, res) => {
 router.post('/simulate', asyncHandler(async (req, res) => {
   const phone = String(req.body.phone || '').replace(/\D/g, '');
   const name = String(req.body.name || '').trim().slice(0, 80);
-  const type = req.body.type === 'image' ? 'image' : 'text';
+  const type = ['image', 'audio'].includes(req.body.type) ? req.body.type : 'text';
   const text = String(req.body.text || '').trim().slice(0, 1000);
 
   if (!PHONE_RE.test(phone)) {
@@ -38,14 +39,28 @@ router.post('/simulate', asyncHandler(async (req, res) => {
   const before = await Conversation.findOne({ customerPhone: phone }).lean();
   const startedAt = new Date();
 
-  // Same shape Meta sends, run through the exact same handler as a real webhook.
+  // A customer who writes back has seen your earlier replies: turn their
+  // ticks blue the same way WhatsApp's "read" updates would.
+  if (before) {
+    const unread = await Message.find({ conversationId: before._id, direction: 'outbound', status: { $in: ['sent', 'delivered'] } })
+      .select('waMessageId')
+      .lean();
+    for (const m of unread) {
+      if (m.waMessageId) await deliveryStatus.applyStatus({ id: m.waMessageId, status: 'read' });
+    }
+  }
+
+  // Same shape Meta sends for each kind of message.
+  const media = {
+    text: { text: { body: text } },
+    // A photo's caption is whatever was typed in the message box, if anything.
+    image: { image: { id: 'test-image', mime_type: 'image/svg+xml', ...(text ? { caption: text } : {}) } },
+    audio: { audio: { id: 'test-voice', mime_type: 'audio/wav', voice: true } },
+  }[type];
+
+  // Run through the exact same handler as a real webhook.
   await handleIncomingMessage(
-    {
-      from: phone,
-      id: `wamid.TEST.${crypto.randomUUID()}`,
-      type,
-      ...(type === 'text' ? { text: { body: text } } : { image: { id: 'test-image' } }),
-    },
+    { from: phone, id: `wamid.TEST.${crypto.randomUUID()}`, type, ...media },
     { contacts: [{ profile: { name } }] }
   );
 

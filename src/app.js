@@ -64,6 +64,10 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') {
     return res.status(413).json({ error: 'Payload too large' });
   }
+  // A deliberate, user-facing error (e.g. the reply window has closed).
+  if (err.expose && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: err.message });
+  }
   // Bad Mongo ObjectId in a :id param, or a schema validation failure.
   if (err.name === 'CastError' || err.name === 'ValidationError') {
     return res.status(400).json({ error: 'Invalid request' });

@@ -2,7 +2,7 @@ const express = require('express');
 const Ticket = require('../models/Ticket');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
-const whatsapp = require('../services/whatsapp');
+const { replyAsFounder } = require('../services/founderReply');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { attachCustomerNames } = require('../utils/customerNames');
 
@@ -31,38 +31,11 @@ router.get('/:id', asyncHandler(async (req, res) => {
 }));
 
 router.post('/:id/reply', asyncHandler(async (req, res) => {
-  const { body } = req.body;
-  if (!body || !body.trim()) return res.status(400).json({ error: 'body is required' });
-
   const ticket = await Ticket.findById(req.params.id);
   if (!ticket) return res.status(404).json({ error: 'ticket not found' });
-
-  await whatsapp.sendTextMessage(ticket.customerPhone, body);
-  const message = await Message.create({
-    conversationId: ticket.conversationId,
-    ticketId: ticket._id,
-    direction: 'outbound',
-    type: 'text',
-    body,
-    sentByFounder: true,
-  });
-
-  const wasResolved = ticket.status === 'resolved';
-  ticket.status = 'founder_replied';
-  ticket.lastActivityAt = new Date();
-  if (wasResolved) ticket.resolvedAt = null;
-  await ticket.save();
-
-  // Replying reopens the conversation. If the ticket had been resolved, the
-  // resolve step cleared activeTicketId; restore it so the customer's next
-  // message attaches to this ticket instead of starting fresh triage.
-  await Conversation.findByIdAndUpdate(ticket.conversationId, {
-    activeTicketId: ticket._id,
-    lastMessageAt: new Date(),
-    lastMessagePreview: body.slice(0, 140),
-  });
-
-  res.json(message);
+  const conversation = await Conversation.findById(ticket.conversationId);
+  if (!conversation) return res.status(404).json({ error: 'conversation not found' });
+  res.json(await replyAsFounder({ conversation, body: req.body.body, ticket }));
 }));
 
 router.post('/:id/resolve', asyncHandler(async (req, res) => {

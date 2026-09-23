@@ -11,6 +11,9 @@ const customerSchema = new mongoose.Schema(
     optedInMarketing: { type: Boolean, default: false },
     // Founder's private note about this customer (allergies, preferences, etc.).
     notes: { type: String, default: '' },
+    // Founder's own labels ("Jain", "Monthly", "Gifting") for finding and
+    // grouping customers. Cleaned by services/tags.js.
+    tags: { type: [String], default: [], index: true },
   },
   { timestamps: true }
 );

@@ -6,76 +6,117 @@
   <title>Thakar Kitchen Inbox</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon.svg" />
-  <meta name="theme-color" content="#b45309" />
+  <meta name="theme-color" content="#1B0F08" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div id="app">
-
-    <!-- Login: enter the INBOX_API_KEY once, stored on this device only -->
-    <div id="login-screen">
-      <div class="login-logo">TK</div>
-      <h1>Thakar Kitchen Inbox</h1>
-      <p>Enter your access code to continue. You'll only need to do this once on this phone.</p>
-      <input id="login-input" type="password" inputmode="text" autocomplete="off" placeholder="Access code" />
-      <button id="login-button">Continue</button>
-      <div id="login-error" class="login-error hidden">That access code was rejected — check it and try again.</div>
+  <!-- Login: enter the INBOX_API_KEY once, stored on this device only -->
+  <div id="login-screen" class="login hidden">
+    <div class="login-card">
+      <div class="brand-mark">
+        <span class="brand-name">Thakar Kitchen</span>
+        <span class="brand-sub">WhatsApp inbox</span>
+      </div>
+      <p>Enter your access code to continue. You'll only need to do this once on this device.</p>
+      <input id="login-input" type="password" autocomplete="off" placeholder="Access code" aria-label="Access code" />
+      <button id="login-button" class="btn btn-primary btn-block" type="button">Continue</button>
+      <div id="login-error" class="login-error hidden">That access code was rejected. Check it and try again.</div>
     </div>
-
-    <!-- Main app: hidden until logged in -->
-    <div id="main-screen" class="hidden">
-      <div class="topbar">
-        <button id="back-button" class="icon-btn hidden" aria-label="Back">‹</button>
-        <div class="topbar-titles">
-          <span id="topbar-title">Tickets</span>
-          <span id="topbar-subtitle" class="topbar-subtitle hidden"></span>
-        </div>
-        <button id="profile-button" class="icon-btn hidden" aria-label="View customer">&#128100;</button>
-        <button id="refresh-button" class="icon-btn" aria-label="Refresh">↻</button>
-      </div>
-      <div id="test-banner" class="test-banner hidden">Test mode: nothing is sent on WhatsApp</div>
-
-      <!-- List view (tickets or chats) -->
-      <div id="list-view">
-        <div id="ticket-filter" class="filter-row hidden">
-          <button data-filter="open" class="active">Needs attention</button>
-          <button data-filter="resolved">Resolved</button>
-        </div>
-        <div id="list-screen" class="screen"></div>
-      </div>
-
-      <!-- Thread view (one conversation) -->
-      <div id="thread-screen" class="hidden">
-        <div id="thread-messages"></div>
-        <div id="quick-replies" class="quick-replies"></div>
-        <div id="thread-actions" class="thread-actions hidden"></div>
-        <div class="composer">
-          <textarea id="composer-input" rows="1" placeholder="Type a reply…"></textarea>
-          <button id="composer-send" aria-label="Send">Send</button>
-        </div>
-      </div>
-
-      <!-- Customer profile (CRM) -->
-      <div id="profile-screen" class="screen hidden">
-        <div id="profile-body"></div>
-      </div>
-
-      <!-- Customer-message simulator (test mode only) -->
-      <div id="test-screen" class="screen hidden">
-        <div id="test-body"></div>
-      </div>
-
-      <div class="bottom-nav">
-        <button id="nav-tickets" class="active">
-          <span class="nav-label">Tickets</span>
-          <span id="tickets-count" class="count hidden">0</span>
-        </button>
-        <button id="nav-chats"><span class="nav-label">Chats</span></button>
-        <button id="nav-test" class="hidden"><span class="nav-label">Test</span></button>
-      </div>
-    </div>
-
   </div>
+
+  <div id="shell" class="shell hidden">
+    <!-- Desktop navigation -->
+    <aside class="sidebar" aria-label="Main">
+      <div class="brand-mark">
+        <span class="brand-name">Thakar Kitchen</span>
+        <span class="brand-sub">WhatsApp inbox</span>
+      </div>
+      <nav class="side-nav">
+        <a href="#/home" data-nav="home"><span class="ico" data-icon="home"></span><span>Home</span></a>
+        <a href="#/inbox" data-nav="inbox"><span class="ico" data-icon="inbox"></span><span>Inbox</span><span class="nav-count hidden" data-count="inbox"></span></a>
+        <a href="#/test" data-nav="test" class="test-only hidden"><span class="ico" data-icon="flask"></span><span>Test</span></a>
+      </nav>
+      <div class="side-foot">
+        <div class="test-chip test-only hidden"><span class="ico" data-icon="alert"></span>Test mode: nothing is sent</div>
+        <div class="me">
+          <span class="me-avatar" id="me-avatar">TK</span>
+          <div><div class="me-name" id="me-name">Thakar Kitchen</div><div class="me-role">Founder</div></div>
+        </div>
+        <button id="logout-button" class="link-btn" type="button">Log out on this device</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="view-home" class="view hidden" aria-label="Home"></section>
+
+      <section id="view-inbox" class="view inbox hidden" aria-label="Inbox">
+        <div class="pane pane-list">
+          <header class="list-head">
+            <h1 class="page-title">Inbox</h1>
+            <label class="search">
+              <span class="ico" data-icon="search"></span>
+              <input id="search-input" type="search" placeholder="Name, number, tag or ticket #" aria-label="Search chats" autocomplete="off" />
+            </label>
+            <div class="chips" id="filter-chips" role="group" aria-label="Show">
+              <button type="button" data-filter="all">All <span></span></button>
+              <button type="button" data-filter="needs_reply">Needs reply <span></span></button>
+              <button type="button" data-filter="tickets">Tickets <span></span></button>
+            </div>
+          </header>
+          <div id="chat-list" class="chat-list"></div>
+        </div>
+
+        <div class="pane pane-thread" id="thread-pane">
+          <div class="thread-empty" id="thread-empty">
+            <span class="ico big" data-icon="chat"></span>
+            <p>Pick a chat to read and reply.</p>
+          </div>
+          <div class="thread hidden" id="thread">
+            <header class="thread-head">
+              <a class="icon-btn back-btn" href="#/inbox" aria-label="Back to inbox"><span class="ico" data-icon="back"></span></a>
+              <button type="button" class="thread-who" id="thread-who" aria-label="Customer details"></button>
+              <button type="button" class="icon-btn profile-btn" id="profile-btn" aria-label="Customer details"><span class="ico" data-icon="user"></span></button>
+            </header>
+            <div class="thread-strip" id="thread-strip"></div>
+            <div class="messages" id="messages" aria-live="polite"></div>
+            <div class="quick-replies" id="quick-replies"></div>
+            <div class="composer" id="composer">
+              <textarea id="composer-input" rows="1" placeholder="Type a reply" aria-label="Type a reply"></textarea>
+              <button id="composer-send" class="send-btn" type="button" aria-label="Send"><span class="ico" data-icon="send"></span></button>
+            </div>
+            <div class="composer-closed hidden" id="composer-closed"></div>
+          </div>
+        </div>
+
+        <aside class="pane pane-customer" id="customer-pane" aria-label="Customer">
+          <header class="customer-head">
+            <button type="button" class="icon-btn" id="customer-close" aria-label="Back to chat"><span class="ico" data-icon="back"></span></button>
+            <span>Customer</span>
+          </header>
+          <div id="customer-body" class="customer-body"></div>
+        </aside>
+      </section>
+
+      <section id="view-test" class="view hidden" aria-label="Test"></section>
+    </main>
+
+    <!-- Phone navigation -->
+    <nav class="tabbar" aria-label="Main">
+      <a href="#/home" data-nav="home"><span class="ico" data-icon="home"></span>Home</a>
+      <a href="#/inbox" data-nav="inbox"><span class="tab-ico"><span class="ico" data-icon="inbox"></span><span class="nav-count hidden" data-count="inbox"></span></span>Inbox</a>
+      <a href="#/test" data-nav="test" class="test-only hidden"><span class="ico" data-icon="flask"></span>Test</a>
+    </nav>
+  </div>
+
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-label="Photo">
+    <button type="button" class="icon-btn lightbox-close" id="lightbox-close" aria-label="Close"><span class="ico" data-icon="close"></span></button>
+    <img id="lightbox-img" alt="Photo from customer" />
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="/app.js"></script>
 </body>
