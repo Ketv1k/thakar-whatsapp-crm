@@ -43,6 +43,18 @@ router.post('/', async (req, res) => {
 
 async function handleIncomingMessage(waMessage, value) {
   const fromPhone = waMessage.from; // digits only, e.g. "919876543210"
+  if (!fromPhone || !waMessage.id) {
+    console.warn('[webhook] skipping message with no sender or id');
+    return;
+  }
+
+  // Idempotency: Meta retries deliveries, so bail out if we've already logged
+  // this WhatsApp message id - otherwise we'd double-reply and open duplicate
+  // tickets. The unique index on waMessageId is the race-proof backstop below.
+  if (await Message.exists({ waMessageId: waMessage.id })) {
+    return;
+  }
+
   const contactName = value?.contacts?.[0]?.profile?.name || '';
   const text =
     waMessage.type === 'text'
@@ -63,15 +75,23 @@ async function handleIncomingMessage(waMessage, value) {
     conversation = await Conversation.create({ customerPhone: fromPhone });
   }
 
-  // 2. Save the inbound message
-  const inboundMessage = await Message.create({
-    conversationId: conversation._id,
-    ticketId: conversation.activeTicketId || null,
-    direction: 'inbound',
-    type: waMessage.type,
-    body: text,
-    waMessageId: waMessage.id,
-  });
+  // 2. Save the inbound message. If a concurrent retry beat us to it, the
+  //    unique waMessageId index throws a duplicate-key error - treat that as
+  //    "already handled" and stop, before any reply or ticket is created.
+  let inboundMessage;
+  try {
+    inboundMessage = await Message.create({
+      conversationId: conversation._id,
+      ticketId: conversation.activeTicketId || null,
+      direction: 'inbound',
+      type: waMessage.type,
+      body: text,
+      waMessageId: waMessage.id,
+    });
+  } catch (err) {
+    if (err && err.code === 11000) return;
+    throw err;
+  }
 
   conversation.lastMessageAt = new Date();
   conversation.lastMessagePreview = text.slice(0, 140);

@@ -3,25 +3,34 @@ const Ticket = require('../models/Ticket');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const whatsapp = require('../services/whatsapp');
+const { asyncHandler } = require('../utils/asyncHandler');
+const { attachCustomerNames } = require('../utils/customerNames');
 
 const router = express.Router();
 
+const VALID_STATUSES = ['open', 'founder_replied', 'resolved'];
+
 // Default view: everything that still needs attention. ?status=resolved to see history.
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const status = req.query.status;
+  if (status && !VALID_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'invalid status filter' });
+  }
   const filter = status ? { status } : { status: { $in: ['open', 'founder_replied'] } };
   const tickets = await Ticket.find(filter).sort({ lastActivityAt: -1 }).limit(200).lean();
+  await attachCustomerNames(tickets);
   res.json(tickets);
-});
+}));
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', asyncHandler(async (req, res) => {
   const ticket = await Ticket.findById(req.params.id).lean();
   if (!ticket) return res.status(404).json({ error: 'ticket not found' });
+  await attachCustomerNames([ticket]);
   const messages = await Message.find({ ticketId: ticket._id }).sort({ createdAt: 1 }).lean();
   res.json({ ticket, messages });
-});
+}));
 
-router.post('/:id/reply', async (req, res) => {
+router.post('/:id/reply', asyncHandler(async (req, res) => {
   const { body } = req.body;
   if (!body || !body.trim()) return res.status(400).json({ error: 'body is required' });
 
@@ -38,19 +47,25 @@ router.post('/:id/reply', async (req, res) => {
     sentByFounder: true,
   });
 
+  const wasResolved = ticket.status === 'resolved';
   ticket.status = 'founder_replied';
   ticket.lastActivityAt = new Date();
+  if (wasResolved) ticket.resolvedAt = null;
   await ticket.save();
 
+  // Replying reopens the conversation. If the ticket had been resolved, the
+  // resolve step cleared activeTicketId; restore it so the customer's next
+  // message attaches to this ticket instead of starting fresh triage.
   await Conversation.findByIdAndUpdate(ticket.conversationId, {
+    activeTicketId: ticket._id,
     lastMessageAt: new Date(),
     lastMessagePreview: body.slice(0, 140),
   });
 
   res.json(message);
-});
+}));
 
-router.post('/:id/resolve', async (req, res) => {
+router.post('/:id/resolve', asyncHandler(async (req, res) => {
   const ticket = await Ticket.findById(req.params.id);
   if (!ticket) return res.status(404).json({ error: 'ticket not found' });
 
@@ -63,6 +78,6 @@ router.post('/:id/resolve', async (req, res) => {
   await Conversation.findByIdAndUpdate(ticket.conversationId, { activeTicketId: null });
 
   res.json(ticket);
-});
+}));
 
 module.exports = router;

@@ -15,4 +15,16 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Idempotency guard: Meta retries webhook deliveries aggressively, so the same
+// inbound message can arrive more than once. A unique index on the WhatsApp
+// message id lets a duplicate insert fail fast (code 11000) instead of creating
+// a second copy. A *partial* index (only rows where waMessageId is a string) is
+// required rather than `sparse`: outbound messages store waMessageId as an
+// explicit null, which a sparse index still treats as an indexed value and would
+// reject as a duplicate on the second outbound message.
+messageSchema.index(
+  { waMessageId: 1 },
+  { unique: true, partialFilterExpression: { waMessageId: { $type: 'string' } } }
+);
+
 module.exports = mongoose.model('Message', messageSchema);

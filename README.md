@@ -50,10 +50,21 @@ npm install
      before doing anything, so you migrate it to your own app rather than re-registering from scratch.
 3. Under **Configuration**, set your webhook URL to `https://<your-domain>/webhook` and the verify token
    to whatever you put in `WHATSAPP_VERIFY_TOKEN`. Subscribe to the `messages` field.
+4. Copy your **App Secret** (Settings → Basic) into `WHATSAPP_APP_SECRET`. The webhook uses it to verify
+   Meta's `X-Hub-Signature-256` on every incoming POST and reject forged requests. If you leave it blank
+   the server still runs but logs a warning and accepts unauthenticated webhooks — set it before going live.
 
-### 3. Get your Shopify Admin API token
-Shopify Admin → Settings → Apps and sales channels → Develop apps → Create an app →
-give it `read_customers` and `read_orders` scopes → install it → copy the Admin API access token.
+### 3. Connect Shopify
+Either of these works — pick one:
+
+- **Dev Dashboard app (recommended):** at [dev.shopify.com](https://dev.shopify.com), create an app,
+  release a version with read scopes for orders, customers and products, and install it on your store.
+  Copy its **Client ID** and **Client secret** into `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET`.
+  The server exchanges them for an access token and renews it automatically every 24 hours.
+  (The app and store must belong to the same Shopify organization.)
+- **Store-admin custom app:** Shopify Admin → Settings → Apps and sales channels → Develop apps →
+  Create an app → add `read_customers` and `read_orders` scopes → install → copy the permanent
+  Admin API access token (`shpat_…`) into `SHOPIFY_ADMIN_API_TOKEN`.
 
 ### 4. Configure environment
 ```
@@ -78,11 +89,51 @@ app.use(whatsappCrm);
 ```
 Copy this project's `src/models/*` into wherever your existing models live (or just require them from
 here), make sure your existing app connects to the same MongoDB, serve `public/` as static files, and
-call `require('./thakar-whatsapp-crm/src/jobs/slaCheck').startSlaCheckJob()` once at startup.
+call `require('./thakar-whatsapp-crm/src/jobs/slaCheck').startSlaCheckJob()` once at startup. Mount this
+app *before* any global `express.json()` in your existing backend (see the note under "Production
+hardening" below) so the webhook can verify Meta's signature.
 
 ### 6. Local testing before going live
 WhatsApp needs a public HTTPS URL to send webhooks to. For local testing, use `ngrok http 3000` and put
 that URL (+ `/webhook`) into Meta's webhook config temporarily.
+
+Run the unit tests (triage rules + webhook signature verification) with:
+```
+npm test
+```
+
+## Production hardening (built in)
+- **Webhook authenticity** — every `POST /webhook` is checked against Meta's `X-Hub-Signature-256`
+  using `WHATSAPP_APP_SECRET` (fails closed when the secret is set). The `GET` handshake still uses
+  `WHATSAPP_VERIFY_TOKEN`.
+- **Duplicate deliveries** — Meta retries webhooks, so inbound messages are de-duplicated on the
+  WhatsApp message id (unique index + pre-check). A retried message won't double-reply or open a
+  second ticket.
+- **Ticket numbers** — handed out via an atomic counter, so two messages arriving at once can't collide.
+- **Robust API** — async routes can't crash the process on bad input; a malformed `:id`, oversized
+  body, or bad JSON returns a clean 4xx instead of a stack trace. The Inbox API key is compared in
+  constant time.
+
+> **Mounting into an existing backend:** the webhook needs the *raw* request body to verify Meta's
+> signature. Don't run a global `express.json()` ahead of these routes — let this app's own scoped
+> parsers handle body parsing (they capture the raw bytes for you).
+
+## Customer profiles (CRM)
+
+Tap the person icon in any conversation to see a customer's full profile, assembled
+automatically — no manual data entry:
+
+- **Automatic status** — New / Returning / VIP, worked out from their Shopify order
+  history (tune the thresholds via `CRM_RETURNING_ORDERS`, `CRM_VIP_ORDERS`,
+  `CRM_VIP_SPEND`).
+- **Order history + lifetime spend** — pulled live from Shopify.
+- **Past tickets** — every support issue this customer has raised.
+- **Private note** — the one thing you type: allergies, delivery preferences, "buys in
+  bulk", etc.
+- **Marketing opt-in** — toggle that will feed Phase 2 broadcasts.
+
+API: `GET /api/customers/:phone` returns the assembled profile; `PATCH /api/customers/:phone`
+updates the note / opt-in. Both require the Inbox API key.
 
 ## Not built yet (Phase 2 / 3, per our plan)
 - Marketing broadcasts to a customer segment

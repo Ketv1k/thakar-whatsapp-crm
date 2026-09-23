@@ -9,6 +9,8 @@ const customerSchema = new mongoose.Schema(
     shopifyCustomerId: { type: String, default: null },
     lastOrderNumber: { type: String, default: null },
     optedInMarketing: { type: Boolean, default: false },
+    // Founder's private note about this customer (allergies, preferences, etc.).
+    notes: { type: String, default: '' },
   },
   { timestamps: true }
 );
