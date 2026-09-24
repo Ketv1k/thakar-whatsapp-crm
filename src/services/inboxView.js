@@ -79,7 +79,7 @@ async function decorate(conversations) {
   const phones = [...new Set(conversations.map((c) => c.customerPhone))];
   const ticketIds = conversations.map((c) => c.activeTicketId).filter(Boolean);
   const [customers, tickets, lastMessages] = await Promise.all([
-    Customer.find({ phone: { $in: phones } }).select('phone name tags').lean(),
+    Customer.find({ phone: { $in: phones } }).select('phone name tags status').lean(),
     ticketIds.length
       ? Ticket.find({ _id: { $in: ticketIds } }).select('ticketNumber issueType status lastActivityAt').lean()
       : [],
@@ -110,6 +110,7 @@ async function decorate(conversations) {
       customerPhone: c.customerPhone,
       customerName: customer.name || '',
       tags: customer.tags || [],
+      vip: customer.status === 'vip',
       lastMessageAt: c.lastMessageAt,
       lastMessagePreview: c.lastMessagePreview || '',
       needsReply: !!c.unread,
@@ -189,8 +190,10 @@ async function dashboard() {
   const today = startOfTodayIndia();
   const slaCutoff = new Date(Date.now() - slaHours() * HOUR);
   const codWaiting = { isCod: true, 'cod.status': 'awaiting', cancelledAt: null, shippedAt: null };
+  const endOfToday = new Date(today.getTime() + 24 * HOUR);
+  const monthDay = new Date(Date.now() + 5.5 * HOUR).toISOString().slice(5, 10); // today in India, 'MM-DD'
 
-  const [openTickets, waitingChats, autoToday, inboundToday, customersToday, ticketsToday, needsReply, codOrders, codCancels, lastCampaign] =
+  const [openTickets, waitingChats, autoToday, inboundToday, customersToday, ticketsToday, needsReply, codOrders, codCancels, lastCampaign, followUps, birthdays] =
     await Promise.all([
       Ticket.find({ status: { $in: ['open', 'founder_replied'] } })
         .sort({ lastActivityAt: 1 })
@@ -208,6 +211,8 @@ async function dashboard() {
       Order.find(codWaiting).sort({ 'cod.requestedAt': 1 }).limit(200).lean(),
       Order.find({ isCod: true, 'cod.status': 'cancel_requested', cancelledAt: null, shippedAt: null }).sort({ 'cod.answeredAt': 1 }).limit(20).lean(),
       lastCampaignSummary(),
+      Customer.find({ followUpAt: { $ne: null, $lt: endOfToday } }).sort({ followUpAt: 1 }).limit(20).select('phone name followUpAt followUpNote').lean(),
+      Customer.find({ birthday: monthDay }).limit(10).select('phone name birthday').lean(),
     ]);
 
   const auto = Object.fromEntries(autoToday.map((r) => [r._id, r.n]));
@@ -224,15 +229,18 @@ async function dashboard() {
   // Who to look at first: cancel requests (before the order ships), overdue
   // tickets, new tickets, COD orders nobody confirmed, then chats waiting
   // longest. Names are attached in one query at the end.
-  const phoneOf = (a) => (a.ticket ? a.ticket.customerPhone : a.order ? a.order.phone : a.conversation.customerPhone);
+  const phoneOf = (a) =>
+    a.ticket ? a.ticket.customerPhone : a.order ? a.order.phone : a.customer ? a.customer.phone : a.conversation.customerPhone;
   // One line per customer: the most urgent reason wins.
   const seen = new Set();
   const attention = [
     ...codCancels.map((o) => ({ kind: 'cod_cancel', order: o })),
     ...overdue.map((t) => ({ kind: 'overdue', ticket: t })),
     ...waitingOnYou.filter((t) => !overdue.includes(t)).map((t) => ({ kind: 'ticket', ticket: t })),
+    ...followUps.map((c) => ({ kind: 'follow_up', customer: c })),
     ...codStale.map((o) => ({ kind: 'cod_waiting', order: o })),
     ...waitingChats.map((c) => ({ kind: 'needs_reply', conversation: c })),
+    ...birthdays.map((c) => ({ kind: 'birthday', customer: c })),
   ]
     .filter((a) => {
       const phone = phoneOf(a);
@@ -240,7 +248,7 @@ async function dashboard() {
       seen.add(phone);
       return true;
     })
-    .slice(0, 8);
+    .slice(0, 10);
 
   const phones = attention.map(phoneOf);
   const [names, chats] = await Promise.all([
@@ -277,6 +285,8 @@ async function dashboard() {
       if (a.ticket) {
         return { ...base, ticketNumber: a.ticket.ticketNumber, issueType: a.ticket.issueType, since: a.ticket.lastActivityAt };
       }
+      if (a.kind === 'follow_up') return { ...base, note: a.customer.followUpNote || '', since: a.customer.followUpAt };
+      if (a.kind === 'birthday') return { ...base, since: null };
       if (a.order) {
         const amount = a.order.outstanding > 0 ? a.order.outstanding : a.order.total;
         return {

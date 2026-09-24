@@ -316,7 +316,7 @@ test('STOP and START are understood only as whole messages', () => {
 
 // ---- Customers & campaigns ----
 test('customer groups build the right filters', () => {
-  assert.deepEqual(customerFilter({ segment: 'vip' }), { status: 'vip' });
+  assert.deepEqual(customerFilter({ segment: 'vip' }, NOW), { status: 'vip', lastOrderAt: { $gte: new Date(NOW.getTime() - 180 * DAY) } });
   assert.deepEqual(customerFilter({ segment: 'all' }), {});
   const lapsed = customerFilter({ segment: 'lapsed' }, NOW);
   assert.equal(lapsed.lastOrderAt.$lt.toISOString(), new Date(NOW.getTime() - 45 * DAY).toISOString());
@@ -326,7 +326,7 @@ test('customer groups build the right filters', () => {
 
 test('campaign audiences are opted-in only, with a gap between offers', () => {
   const f = campaigns.audienceFilter({ segment: 'vip', tag: '' }, NOW);
-  assert.deepEqual(f.$and[0], { status: 'vip' });
+  assert.deepEqual(f.$and[0], { status: 'vip', lastOrderAt: { $gte: new Date(NOW.getTime() - 180 * DAY) } });
   assert.deepEqual(f.$and[1], { optedInMarketing: true });
   assert.equal(f.$and[2].$or[1].lastMarketingAt.$lt.toISOString(), new Date(NOW.getTime() - 24 * HOUR).toISOString());
 });

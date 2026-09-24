@@ -11,7 +11,7 @@ src/
   app.js              Express app (routes + auth) - mount this into your existing backend, or run standalone
   server.js           Standalone entry point (npm start) - connects DB, serves the PWA, starts the jobs
   models/              Customer, Conversation, Message, Ticket, Order, AbandonedCheckout, StockAlert,
-                       Template, Campaign, Setting (Mongoose)
+                       Template, Campaign, Group, Setting (Mongoose)
   services/
     whatsapp.js        Send/receive via Meta's WhatsApp Cloud API (+ download customers' photos/voice notes)
     outbound.js         Every message the app sends goes through here (text + templates), with delivery tracking
@@ -26,10 +26,13 @@ src/
     orderEvents.js      The rules for which order update is due (pure, tested)
     cod.js              COD confirmation: Confirm / Cancel buttons and the answers
     customerSync.js     Shopify customers -> the CRM (orders, spend, city, marketing consent)
-    segments.js         Customer groups (VIP, lapsed, opted in...)
+    segments.js         Customer stages and filters (New, Needs 2nd order, VIP, bought X...)
     campaigns.js        Broadcasts: audience, cost, sending, results
     cartRecovery.js     Abandoned-cart reminders
     cartLinks.js        Carts built in a chat: the link, the message, and matching orders back to it
+    customerInsights.js Past order import + per-customer numbers (products, order gap, COD)
+    customerTimeline.js One customer's history for their profile
+    contactImport.js    CSV import of a customer list (with opt-in)
     reorder.js          Reorder reminders
     backInStock.js      Back-in-stock alerts
     optIn.js            STOP / START and marketing opt-in
@@ -259,6 +262,15 @@ automatically — no manual data entry:
 - **Private note** — allergies, delivery preferences, "buys in bulk", etc.
 - **Orders with COD answers**, and **back-in-stock requests** for this customer.
 - **Offers opt-in** — whether they get campaigns and reminders, and how they opted in.
+- **Stage and numbers** — their stage (below), usual order value, how often they order and
+  when the next order is due, how they pay (online / COD, and COD orders cancelled), what they
+  buy most, and where they live.
+- **History** — one timeline: orders, chats (one line per day), campaigns and reminders they
+  got, cart links, carts they left, problems reported, restock requests, opt-in / STOP.
+- **Remind me** — a follow-up date and note; it shows on Home under "Needs your attention"
+  on the day. **Birthday** — day and month; shows on Home on the day and in the
+  "Birthday this month" filter.
+- VIP customers get a **VIP** badge in the chat list.
 
 API: `GET /api/customers/:phone` returns the assembled profile; `PATCH /api/customers/:phone`
 updates the note / tags / opt-in. Both require the Inbox API key.
@@ -287,12 +299,23 @@ incl. GST, free if the customer messaged you in the last 24 hours.
 
 - **Customers** — every Shopify customer with a phone number (synced every 6 hours) plus everyone
   who has messaged, with orders, spend, last order, city, tags and whether they get offers.
-  Groups: VIP, Returning, Ordered once, Lapsed 45+ days (`CRM_LAPSED_DAYS`), No orders yet,
-  Opted in to offers — plus any tag.
+- **Stages** — everyone who has ordered is in exactly one, updated automatically:
+  **New** (first order in the last 30 days) · **Needs 2nd order** (ordered once, 30–120 days
+  ago) · **Loyal** (2+ orders, latest in 90 days) · **VIP** (5+ orders or ₹5,000+, ordered in
+  the last 6 months) · **At risk** (2+ orders, none in 90 days) · **Lost** (one order 120+ days
+  ago, or no order in 6 months) · plus **No orders yet**.
+- **Filters** on any stage: bought / never bought a product, number of orders, total spent,
+  last order, pays mostly online or COD, city / state / pincode, tag, gets offers, birthday
+  this month. **Save as a group** to reuse it (and pick it in campaigns); **Download list**
+  gives a CSV of whoever is showing.
+- What each customer bought comes from their order history: the app imports all past Shopify
+  orders once (orders only — nothing is sent for them), then recomputes customer numbers hourly
+  (`services/customerInsights.js`).
 - **Campaigns** — pick a group, an approved message and a time. The composer shows how many
   people it reaches and what it costs (Meta's marketing rate, ₹0.8631 + 18% GST ≈ ₹1.02 each),
   and a preview. "Send a test to me" goes to `FOUNDER_PHONE`. Results: sent, delivered, read,
-  replies within 3 days, and orders + revenue within 7 days.
+  replies within 3 days, and orders + revenue within 7 days — with what it cost next to what it
+  brought in, and the orders listed. The campaign list shows orders and revenue per campaign.
 - New campaign messages can be written in the app ("Write a new one"); they get a **Stop
   promotions** button and go to Meta for approval. Photo messages can be made in WhatsApp Manager
   and are imported by **Refresh** on the Automations page.
@@ -307,6 +330,17 @@ you switch it on in their profile; they reply **START**; you opt in a whole grou
 Customers page (only if they already agreed elsewhere, e.g. in Zoko); or — if you turn it on in
 Automations — they accepted marketing at checkout in Shopify. Replying **STOP** (or tapping
 **Stop promotions**) opts them out; order updates still reach them.
+
+**Grow your offers list** (Customers page) brings the ways in together:
+1. **Import a list** — a CSV (e.g. a Zoko export). The phone, name and any opt-in column are
+   found automatically; a preview shows what will happen before anything changes. Tick "They
+   agreed to get offers" to opt them in (only rows marked yes if the file has an opt-in column).
+2. **People who agreed at checkout** — Shopify's marketing checkbox, and people who ticked the
+   WhatsApp box in Magic Checkout but didn't finish.
+3. **A link and QR code** — `wa.me/<your number>?text=Yes, send me offers`; sending that message
+   opts them in, like START.
+
+Anyone who replied STOP is always left out.
 
 ## Cart, reorder and back-in-stock reminders
 

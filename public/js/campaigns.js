@@ -1,8 +1,9 @@
 // Campaigns: send an approved message to a group of opted-in customers, now or
 // later, and see how it did.
-import { state, api, post, patch, del, el, escapeHtml, dateTime, money, toast, ico, isCurrent, plural, SEGMENT_LABELS } from './core.js';
+import { state, api, post, patch, del, el, escapeHtml, dateTime, shortDate, money, toast, ico, isCurrent, plural, SEGMENT_LABELS } from './core.js';
 
 let templatesCache = null;
+let groupsCache = null;
 let editing = null; // { campaign, estimate }
 let viewingStatus = null;
 let saveTimer = null;
@@ -21,8 +22,41 @@ function statusPill(status) {
   return `<span class="pill ${cls}">${escapeHtml(label)}</span>`;
 }
 
+// The stages people can pick as a campaign's group (the older groups stay
+// readable for earlier campaigns).
+const STAGE_KEYS = ['all', 'new', 'second_order', 'loyal', 'vip', 'at_risk', 'lost', 'no_orders'];
+
+function hasFilters(a) {
+  return !!(a && a.filters && Object.keys(a.filters).length);
+}
+
 function audienceLabel(a) {
-  return `${SEGMENT_LABELS[a.segment] || 'Everyone'}${a.tag ? ` · ${a.tag}` : ''}`;
+  return `${a.label || SEGMENT_LABELS[a.segment] || 'Everyone'}${a.tag ? ` · ${a.tag}` : ''}`;
+}
+
+async function loadGroups() {
+  try {
+    groupsCache = await api('/api/customers/groups');
+  } catch (err) {
+    groupsCache = groupsCache || [];
+  }
+  return groupsCache;
+}
+
+// Stages, saved groups, and (when it came from the Customers page with
+// filters) the group as it was picked there.
+function audienceOptions(a) {
+  const groups = groupsCache || [];
+  const match = groups.find((g) => g.segment === a.segment && JSON.stringify(g.filters) === JSON.stringify(a.filters || {}));
+  const custom = hasFilters(a) && !match;
+  const selected = custom ? 'custom' : match && hasFilters(a) ? `group:${match._id}` : `stage:${a.segment}`;
+  const opt = (value, label) => `<option value="${escapeHtml(value)}" ${value === selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  const stageKeys = STAGE_KEYS.includes(a.segment) ? STAGE_KEYS : [...STAGE_KEYS, a.segment];
+  return (
+    (custom ? opt('custom', `From Customers: ${a.label || 'your filters'}`) : '') +
+    `<optgroup label="Stages">${stageKeys.map((k) => opt(`stage:${k}`, SEGMENT_LABELS[k] || k)).join('')}</optgroup>` +
+    (groups.length ? `<optgroup label="Your groups">${groups.map((g) => opt(`group:${g._id}`, `★ ${g.name}`)).join('')}</optgroup>` : '')
+  );
 }
 
 async function loadTemplates(force = false) {
@@ -46,11 +80,12 @@ async function showList() {
     .map((c) => {
       const when = c.status === 'scheduled' ? `Goes out ${dateTime(c.scheduledAt)}` : c.startedAt ? `Sent ${dateTime(c.startedAt)}` : `Draft from ${dateTime(c.createdAt)}`;
       const readPct = c.live.sent ? Math.round((c.live.read / c.live.sent) * 100) : 0;
+      const earned = c.results && c.results.orders ? ` · ${plural(c.results.orders, 'order')}, ${money(c.results.revenue)}` : '';
       return `
         <a class="camp-row" href="#/campaigns/${c._id}">
           <span class="camp-main"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(audienceLabel(c.audience))}${c.templateLabel ? ` · ${escapeHtml(c.templateLabel)}` : ''}</small></span>
           <span class="camp-when">${escapeHtml(when)}</span>
-          <span class="camp-nums">${c.live.sent ? `${c.live.sent} sent · ${readPct}% read` : ''}</span>
+          <span class="camp-nums">${c.live.sent ? `${c.live.sent} sent · ${readPct}% read${earned}` : ''}</span>
           ${statusPill(c.status)}
         </a>`;
     })
@@ -72,9 +107,16 @@ async function showList() {
 async function createAndOpen(query) {
   el('view-campaigns').innerHTML = '<div class="page"><div class="empty">Starting a new campaign…</div></div>';
   try {
+    let filters = {};
+    try {
+      filters = JSON.parse(query.get('filters') || '{}');
+    } catch (err) {
+      /* ignore a bad link */
+    }
+    const label = query.get('label') || '';
     const c = await post('/api/campaigns', {
-      name: 'New campaign',
-      audience: { segment: query.get('segment') || 'all', tag: query.get('tag') || '' },
+      name: label ? `Offer for ${label}`.slice(0, 80) : 'New campaign',
+      audience: { segment: query.get('segment') || 'all', tag: query.get('tag') || '', filters, label },
     });
     location.replace(`#/campaigns/${c._id}`);
   } catch (err) {
@@ -88,7 +130,7 @@ async function showOne(id) {
   view.innerHTML = '<div class="page"><div class="empty">Loading…</div></div>';
   let res;
   try {
-    [res] = await Promise.all([api(`/api/campaigns/${id}`), loadTemplates(true)]);
+    [res] = await Promise.all([api(`/api/campaigns/${id}`), loadTemplates(true), loadGroups()]);
   } catch (err) {
     view.innerHTML = `<div class="page"><div class="empty"><b>Couldn't load</b>${escapeHtml(err.message)}</div></div>`;
     return;
@@ -172,9 +214,7 @@ function renderComposer() {
   const c = editing.campaign;
   const t = currentTemplate();
   const view = el('view-campaigns');
-  const segs = Object.entries(SEGMENT_LABELS)
-    .map(([k, l]) => `<option value="${k}" ${c.audience.segment === k ? 'selected' : ''}>${escapeHtml(l)}</option>`)
-    .join('');
+  const segs = audienceOptions(c.audience);
   const scheduled = c.status === 'scheduled';
   view.innerHTML = `
     <div class="page composer-page">
@@ -257,6 +297,7 @@ function scheduleSave() {
 async function refreshEstimate() {
   const c = editing.campaign;
   const params = new URLSearchParams({ segment: c.audience.segment, tag: c.audience.tag || '' });
+  if (hasFilters(c.audience)) params.set('filters', JSON.stringify(c.audience.filters));
   if (c.templateId) params.set('templateId', c.templateId);
   try {
     const e = await api(`/api/campaigns/estimate?${params}`);
@@ -309,7 +350,12 @@ function wireComposer() {
     scheduleSave();
   });
   q('[data-segment]').addEventListener('change', (e) => {
-    c.audience.segment = e.target.value;
+    const [kind, value] = e.target.value.split(':');
+    if (kind === 'stage') Object.assign(c.audience, { segment: value, filters: {}, label: '' });
+    if (kind === 'group') {
+      const g = (groupsCache || []).find((x) => x._id === value);
+      if (g) Object.assign(c.audience, { segment: g.segment, filters: { ...g.filters }, label: g.name });
+    }
     scheduleSave();
     refreshEstimate();
   });
@@ -486,6 +532,7 @@ function renderResults(res) {
         <div class="kpi"><span class="kpi-label">Orders</span><span class="kpi-value">${s.orders}</span><span class="kpi-sub">${money(s.revenue)} within 7 days</span></div>
         <div class="kpi"><span class="kpi-label">Not delivered</span><span class="kpi-value">${s.failed}</span><span class="kpi-sub">${s.failed ? 'see the reason in each chat' : 'none'}</span></div>
       </section>
+      ${s.sent ? earnedHtml(s) : ''}
       ${res.template ? `<section class="card"><h2>The message</h2><div class="wa-preview">${renderedPreviewFor(res.template, c)}</div></section>` : ''}
     </div>`;
   const cancel = el('view-campaigns').querySelector('[data-cancel]');
@@ -500,6 +547,24 @@ function renderResults(res) {
       }
     });
   }
+}
+
+// What the campaign cost and what came back: orders from people who got it,
+// placed within 7 days.
+function earnedHtml(s) {
+  const times = s.cost > 0 ? s.revenue / s.cost : 0;
+  const verdict = !s.orders
+    ? 'No orders yet from people who got it. Orders placed within 7 days of the message count here.'
+    : `It cost about ${money(s.cost)} and brought in ${money(s.revenue)}${times >= 1 ? ` — about ${Math.round(times)}× what you spent` : ''}.`;
+  const rows = (s.orderList || [])
+    .map((o) => `<a class="box-row" href="#/customers/${escapeHtml(o.phone || '')}"><span><b>${escapeHtml(o.name)}</b> · ${escapeHtml(o.customerName || '')}<div class="sub">${escapeHtml(shortDate(o.placedAt))}</div></span><span>${money(o.total)}</span></a>`)
+    .join('');
+  return `
+    <section class="card earned">
+      <h2>Money in vs. money out</h2>
+      <p class="card-note">${escapeHtml(verdict)}</p>
+      ${rows ? `<div class="box">${rows}</div>` : ''}
+    </section>`;
 }
 
 function renderedPreviewFor(t, c) {

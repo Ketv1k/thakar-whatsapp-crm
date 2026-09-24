@@ -11,6 +11,10 @@ const campaignSchema = new mongoose.Schema(
     audience: {
       segment: { type: String, default: 'all' },
       tag: { type: String, default: '' },
+      // Extra filters (services/segments.js) and the group's name, when the
+      // audience came from the Customers page or a saved group.
+      filters: { type: mongoose.Schema.Types.Mixed, default: {} },
+      label: { type: String, default: '' },
     },
     templateId: { type: mongoose.Schema.Types.ObjectId, ref: 'Template', default: null },
     // What fills each {{n}}: [{ source: 'first_name' | 'text', text: '...' }]

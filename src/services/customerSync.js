@@ -10,6 +10,8 @@ const { normalizePhone } = require('../utils/phone');
 
 const PAGE_SIZE = 100;
 const MAX_PAGES_PER_RUN = 60;
+// Bumped when new fields are read, so every customer is fetched once more.
+const SYNC_VERSION = 2;
 
 // Shopify customer -> our fields. Pure. null when there's no usable phone.
 function mapCustomer(node) {
@@ -23,6 +25,8 @@ function mapCustomer(node) {
     fields: {
       shopifyCustomerId: node.id,
       city: node.defaultAddress?.city || '',
+      state: node.defaultAddress?.province || '',
+      pincode: node.defaultAddress?.zip || '',
       ordersCount,
       totalSpent,
       currency: node.amountSpent?.currencyCode || 'INR',
@@ -58,7 +62,8 @@ async function saveCustomer(mapped, useConsent) {
 async function syncCustomers() {
   if (!shopify.isConfigured()) return { skipped: 'Shopify not connected' };
   const state = await settings.get('sync:customers', {});
-  let checkpoint = state.checkpoint ? new Date(state.checkpoint) : null;
+  const upgrading = state.version !== SYNC_VERSION;
+  let checkpoint = !upgrading && state.checkpoint ? new Date(state.checkpoint) : null;
   const query = checkpoint ? `updated_at:>'${new Date(checkpoint.getTime() - 2 * 60 * 1000).toISOString()}'` : '';
   const useConsent = await optInFromShopifyEnabled();
   let after = state.cursor && !checkpoint ? state.cursor : null;
@@ -74,7 +79,7 @@ async function syncCustomers() {
               id displayName phone numberOfOrders updatedAt
               amountSpent { amount currencyCode }
               lastOrder { createdAt }
-              defaultAddress { city phone }
+              defaultAddress { city province zip phone }
               smsMarketingConsent { marketingState }
             } }
           }
@@ -102,7 +107,7 @@ async function syncCustomers() {
         // First full import: remember the page, and the newest change seen so
         // the next runs only ask for what changed after it.
         await settings.merge('sync:customers', { cursor: after, pendingCheckpoint: newest });
-        if (!after) await settings.merge('sync:customers', { checkpoint: newest || new Date(), cursor: null });
+        if (!after) await settings.merge('sync:customers', { checkpoint: newest || new Date(), cursor: null, version: SYNC_VERSION });
       }
       if (!after) break;
     }

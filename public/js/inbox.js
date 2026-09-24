@@ -99,7 +99,7 @@ function renderChatList() {
         <a class="chat-item${c.needsReply ? ' needs' : ''}" href="#/inbox/${c._id}" aria-current="${state.route.id === c._id}">
           ${avatar(c)}
           <span class="chat-main">
-            <span class="chat-row"><span class="chat-name">${escapeHtml(displayName(c))}</span><span class="chat-time">${escapeHtml(listTime(c.lastMessageAt))}</span></span>
+            <span class="chat-row"><span class="chat-name">${escapeHtml(displayName(c))}</span>${c.vip ? '<span class="pill pill-vip">VIP</span>' : ''}<span class="chat-time">${escapeHtml(listTime(c.lastMessageAt))}</span></span>
             <span class="chat-preview">${ownPreview ? tickHtml(c.last.status) : ''}<span>${escapeHtml(c.lastMessagePreview)}</span></span>
             <span class="chat-labels">${label ? `<span class="pill ${label.cls}">${escapeHtml(label.text)}</span>` : ''}${c.needsReply ? '<span class="dot" aria-label="Needs reply"></span>' : ''}</span>
           </span>

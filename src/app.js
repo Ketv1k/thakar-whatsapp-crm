@@ -45,6 +45,8 @@ const apiJson = express.json({ limit: '1mb' });
 app.use('/webhook', webhookJson, verifyWhatsAppSignature, webhookRoutes);
 
 // Everything the Founder Inbox PWA calls - protected by the shared INBOX_API_KEY.
+// (A customer list import carries a whole CSV file, so it gets more room.)
+app.use('/api/customers/import', requireInboxAuth, express.json({ limit: '8mb' }));
 app.use('/api', apiJson, requireInboxAuth, inboxRoutes);
 app.use('/api/tickets', apiJson, requireInboxAuth, ticketRoutes);
 app.use('/api/customers', apiJson, requireInboxAuth, customerRoutes);

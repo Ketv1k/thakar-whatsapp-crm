@@ -9,7 +9,11 @@ const STOP_WORDS = new Set([
   'stop', 'unsubscribe', 'stop promotions', 'stop promotion', 'stop all', 'opt out', 'optout',
   'stop offers', 'stop messages', 'no more messages', 'unsub',
 ]);
-const START_WORDS = new Set(['start', 'subscribe', 'unstop', 'opt in', 'optin', 'start offers', 'start promotions']);
+const START_WORDS = new Set([
+  'start', 'subscribe', 'unstop', 'opt in', 'optin', 'start offers', 'start promotions',
+  // The message the "get offers on WhatsApp" link fills in (routes/customers.js).
+  'yes send me offers',
+]);
 
 // 'stop' | 'start' | null for a whole message (not a word inside a sentence).
 function detectKeyword(text) {

@@ -7,6 +7,7 @@
 //   every 15 minutes  abandoned carts -> cart reminders
 //   every 30 minutes  back-in-stock checks
 //   hourly            reorder reminders (daytime only)
+//   hourly            customer numbers from orders (first run imports order history)
 //   every 6 hours     Shopify customers (order counts, spend, groups)
 //
 // On a free Render plan the server sleeps when unused; the syncs catch up on
@@ -20,6 +21,7 @@ const JOBS = {
   stock: () => require('../services/backInStock').run(),
   reorder: () => require('../services/reorder').run(),
   customers: () => require('../services/customerSync').syncCustomers(),
+  insights: () => require('../services/customerInsights').run(),
   campaigns: () => require('../services/campaigns').runDue(),
 };
 
@@ -56,8 +58,9 @@ function startScheduler() {
   schedule('7,37 * * * *', 'stock');
   schedule('20 * * * *', 'reorder');
   schedule('40 */6 * * *', 'customers');
+  schedule('25 * * * *', 'insights');
   // Catch up shortly after start-up (e.g. after the server slept).
-  setTimeout(() => runJob('orders').then(() => runJob('customers')), 20 * 1000).unref();
+  setTimeout(() => runJob('orders').then(() => runJob('customers')).then(() => runJob('insights')), 20 * 1000).unref();
   console.log('[jobs] automations scheduled');
 }
 

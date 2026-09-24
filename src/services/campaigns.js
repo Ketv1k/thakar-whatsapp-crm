@@ -37,7 +37,7 @@ function sleep(ms) {
 function audienceFilter(audience, now = new Date()) {
   return {
     $and: [
-      customerFilter({ segment: audience.segment, tag: audience.tag }, now),
+      customerFilter({ segment: audience.segment, tag: audience.tag, filters: audience.filters }, now),
       { optedInMarketing: true },
       { $or: [{ lastMarketingAt: null }, { lastMarketingAt: { $lt: new Date(now.getTime() - gapHours() * HOUR) } }] },
     ],
@@ -235,7 +235,7 @@ async function stats(campaign) {
   const delivered = (by.delivered || 0) + read;
   const sent = (by.sent || 0) + delivered;
   const failed = by.failed || 0;
-  const out = { sent, delivered, read, failed, queued: by.queued || 0, replied: 0, orders: 0, revenue: 0 };
+  const out = { sent, delivered, read, failed, queued: by.queued || 0, replied: 0, orders: 0, revenue: 0, orderList: [] };
   if (!campaign.startedAt || sent === 0) return out;
 
   const convIds = await Message.distinct('conversationId', { campaignId: campaign._id, status: { $ne: 'failed' } });
@@ -254,10 +254,12 @@ async function stats(campaign) {
     placedAt: { $gte: campaign.startedAt, $lte: new Date(campaign.startedAt.getTime() + 7 * DAY) },
     cancelledAt: null,
   })
-    .select('total')
+    .sort({ placedAt: 1 })
+    .select('name customerName phone total placedAt')
     .lean();
   out.orders = orders.length;
   out.revenue = Math.round(orders.reduce((s, o) => s + (o.total || 0), 0));
+  out.orderList = orders.slice(0, 100).map((o) => ({ name: o.name, customerName: o.customerName, phone: o.phone, total: o.total, placedAt: o.placedAt }));
   return out;
 }
 

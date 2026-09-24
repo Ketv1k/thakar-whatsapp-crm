@@ -3,6 +3,7 @@ const Campaign = require('../models/Campaign');
 const Message = require('../models/Message');
 const Template = require('../models/Template');
 const campaigns = require('../services/campaigns');
+const pricing = require('../services/pricing');
 const templates = require('../services/templates');
 const segments = require('../services/segments');
 const { runJob } = require('../jobs/scheduler');
@@ -10,14 +11,20 @@ const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 
+function cleanAudience(a = {}) {
+  return {
+    segment: segments.isSegment(a.segment) ? a.segment : 'all',
+    tag: String(a.tag || '').slice(0, 30),
+    filters: segments.cleanFilters(a.filters),
+    label: String(a.label || '').trim().slice(0, 80),
+  };
+}
+
 function cleanDraft(body = {}) {
   const out = {};
   if (typeof body.name === 'string') out.name = body.name.trim().slice(0, 80) || 'Untitled campaign';
   if (body.audience && typeof body.audience === 'object') {
-    out.audience = {
-      segment: segments.isSegment(body.audience.segment) ? body.audience.segment : 'all',
-      tag: String(body.audience.tag || '').slice(0, 30),
-    };
+    out.audience = cleanAudience(body.audience);
   }
   if (body.templateId !== undefined) out.templateId = /^[a-f0-9]{24}$/.test(String(body.templateId || '')) ? body.templateId : null;
   if (Array.isArray(body.bodyParams)) {
@@ -50,6 +57,12 @@ router.get('/', asyncHandler(async (req, res) => {
   const tpl = new Map(
     (await Template.find({ _id: { $in: list.map((c) => c.templateId).filter(Boolean) } }).select('label name').lean()).map((t) => [String(t._id), t])
   );
+  // Orders and money earned, for campaigns that went out (most recent 30).
+  const results = new Map();
+  for (const c of list.filter((x) => x.startedAt).slice(0, 30)) {
+    const st = await campaigns.stats(c);
+    results.set(String(c._id), { orders: st.orders, revenue: st.revenue });
+  }
   res.json(
     list.map((c) => {
       const s = by[String(c._id)] || {};
@@ -57,17 +70,19 @@ router.get('/', asyncHandler(async (req, res) => {
       const delivered = (s.delivered || 0) + read;
       const sent = (s.sent || 0) + delivered;
       const t = c.templateId ? tpl.get(String(c.templateId)) : null;
-      return { ...c, templateLabel: t ? t.label || t.name : '', live: { sent, delivered, read, failed: s.failed || 0 } };
+      return {
+        ...c,
+        templateLabel: t ? t.label || t.name : '',
+        live: { sent, delivered, read, failed: s.failed || 0 },
+        results: results.get(String(c._id)) || null,
+      };
     })
   );
 }));
 
 // How many people a group reaches and what it costs, for the composer.
 router.get('/estimate', asyncHandler(async (req, res) => {
-  const audience = {
-    segment: segments.isSegment(req.query.segment) ? req.query.segment : 'all',
-    tag: String(req.query.tag || '').slice(0, 30),
-  };
+  const audience = cleanAudience({ segment: req.query.segment, tag: req.query.tag, filters: req.query.filters });
   const template = /^[a-f0-9]{24}$/.test(String(req.query.templateId || '')) ? await Template.findById(req.query.templateId) : null;
   res.json(await campaigns.estimate(audience, template));
 }));
@@ -82,10 +97,13 @@ router.get('/:id', asyncHandler(async (req, res) => {
   const c = await Campaign.findById(req.params.id);
   if (!c) return res.status(404).json({ error: 'campaign not found' });
   const template = await withTemplate(c);
+  const stats = await campaigns.stats(c);
+  // What WhatsApp charges for the messages that went out.
+  stats.cost = Math.round(pricing.estimate(stats.sent, (template && template.category) || 'MARKETING').total);
   res.json({
     campaign: c,
     template: template ? templates.summary(template) : null,
-    stats: await campaigns.stats(c),
+    stats,
     problem: ['draft', 'scheduled'].includes(c.status) ? campaigns.problems(c, template) : null,
   });
 }));

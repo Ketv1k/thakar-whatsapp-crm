@@ -3,7 +3,7 @@
 // founder's note and the offers opt-in.
 import {
   api, post, patch, del, el, escapeHtml, formatPhone, avatar, ago, money, toast, icon, ico,
-  ISSUE_LABELS, switchHtml, shortDate,
+  ISSUE_LABELS, switchHtml, shortDate, plural, STAGE_PILLS,
 } from './core.js';
 
 
@@ -28,7 +28,42 @@ const OPTIN_SOURCES = {
   keyword: 'they replied START',
   bulk: 'added in a group opt-in',
   shopify: 'agreed at checkout (Shopify)',
+  import: 'from a list you imported',
+  checkout: 'ticked WhatsApp at checkout',
 };
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+// What their orders say about them, in plain sentences.
+function glanceRows(p) {
+  const i = p.insights || {};
+  const rows = [];
+  if (i.avgOrder) rows.push(['Usual order', money(i.avgOrder)]);
+  if (i.avgGapDays) {
+    let next = '';
+    if (i.nextOrderAt) {
+      const days = Math.round((new Date(i.nextOrderAt).getTime() - Date.now()) / 86400000);
+      next = days >= 0 ? ` · next one due around ${shortDate(i.nextOrderAt)}` : ` · ${plural(-days, 'day')} late`;
+    }
+    rows.push(['Orders', `about every ${plural(i.avgGapDays, 'day')}${next}`]);
+  }
+  if (i.codOrders || i.prepaidOrders) {
+    const cancelled = i.codCancelled ? ` · <span class="warn-text">${plural(i.codCancelled, 'COD order')} cancelled</span>` : '';
+    rows.push(['Pays', `${escapeHtml(`online ${i.prepaidOrders} · COD ${i.codOrders}`)}${cancelled}`, true]);
+  }
+  if ((i.favourites || []).length) rows.push(['Buys most', i.favourites.join(', ')]);
+  const place = [p.city, p.state, p.pincode].filter(Boolean).join(', ');
+  if (place) rows.push(['Lives in', place]);
+  return rows
+    .map(([k, v, html]) => `<div class="glance-row"><span>${escapeHtml(k)}</span><b>${html ? v : escapeHtml(v)}</b></div>`)
+    .join('');
+}
+
+function stagePillHtml(p) {
+  if (p.stage && p.stageLabel) return `<span class="pill ${STAGE_PILLS[p.stage] || ''}" style="margin-top:4px">${escapeHtml(p.stageLabel)}</span>`;
+  const statusPill = p.status === 'vip' ? 'pill-vip' : p.status === 'returning' ? 'pill-green' : '';
+  return `<span class="pill ${statusPill}" style="margin-top:4px">${escapeHtml(p.statusLabel || 'New customer')}</span>`;
+}
 
 let knownTags = [];
 
@@ -39,7 +74,7 @@ let knownTags = [];
 export function renderProfile(container, p, opts = {}) {
   const s = p.shopify || { found: false };
   const name = p.name || formatPhone(p.phone);
-  const statusPill = p.status === 'vip' ? 'pill-vip' : p.status === 'returning' ? 'pill-green' : '';
+  const glance = glanceRows(p);
   // Shopify's orders, plus any the app knows that Shopify didn't list
   // (test orders in test mode, or everything when Shopify can't be reached).
   const shopifyNames = new Set((s.orders || []).map((o) => o.name));
@@ -77,7 +112,7 @@ export function renderProfile(container, p, opts = {}) {
       <div>
         <h2 class="cust-name">${escapeHtml(name)}</h2>
         <div class="cust-phone">${escapeHtml(formatPhone(p.phone))}${p.city ? ` · ${escapeHtml(p.city)}` : ''}</div>
-        <span class="pill ${statusPill}" style="margin-top:4px">${escapeHtml(p.statusLabel || 'New customer')}</span>
+        ${stagePillHtml(p)}
       </div>
     </div>
     ${opts.showChatLink
@@ -90,9 +125,18 @@ export function renderProfile(container, p, opts = {}) {
       <div class="stat"><b>${money(s.totalSpent || 0, s.currency)}</b><span>spent</span></div>
       <div class="stat"><b>${s.lastOrderAt ? escapeHtml(ago(s.lastOrderAt)) : '—'}</b><span>last order</span></div>
     </div>
+    ${glance ? `<div class="glance">${glance}</div>` : ''}
+    <section>
+      <h3 class="section-title">Remind me</h3>
+      <div data-followup></div>
+    </section>
     <section>
       <h3 class="section-title">Orders</h3>
       <div class="box">${orders || (p.shopifyConnected === false ? '<div class="box-empty">Shopify isn\'t connected.</div>' : s.error && !s.fromSync ? '<div class="box-empty">Couldn\'t reach Shopify right now.</div>' : '<div class="box-empty">No orders for this number.</div>')}</div>
+    </section>
+    <section>
+      <h3 class="section-title">History</h3>
+      <div data-history><div class="muted">Loading…</div></div>
     </section>
     <section>
       <h3 class="section-title">Tags</h3>
@@ -110,6 +154,10 @@ export function renderProfile(container, p, opts = {}) {
       <h3 class="section-title">Your note</h3>
       <textarea class="note" data-note placeholder="e.g. Prefers less spicy · orders for her parents every month" aria-label="Private note about this customer">${escapeHtml(p.notes || '')}</textarea>
       <div class="note-row"><button type="button" class="btn btn-small" data-note-save>Save note</button><span class="hidden" data-note-saved>Saved</span></div>
+    </section>
+    <section>
+      <h3 class="section-title">Birthday</h3>
+      <div data-birthday></div>
     </section>
     <label class="optin">
       <span>Gets offers on WhatsApp<small data-optin-note>${optinNote}</small></span>
@@ -132,6 +180,9 @@ export function renderProfile(container, p, opts = {}) {
 
   renderTags(q('[data-tags]'), p, opts);
   renderStockAlerts(q('[data-stock]'), p);
+  renderFollowUp(q('[data-followup]'), p);
+  renderBirthday(q('[data-birthday]'), p);
+  loadHistory(q('[data-history]'), p.phone, 12);
 
   const note = q('[data-note]');
   let savedNote = p.notes || '';
@@ -167,6 +218,154 @@ export function renderProfile(container, p, opts = {}) {
       toast(`Not updated: ${err.message}`);
     }
   });
+}
+
+// ---------- Reminder to follow up ----------
+function inDays(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  d.setHours(10, 0, 0, 0);
+  return d;
+}
+
+function dateInputValue(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function renderFollowUp(box, p) {
+  if (p.followUpAt) {
+    const due = new Date(p.followUpAt);
+    const overdue = due.getTime() < Date.now();
+    box.innerHTML = `
+      <div class="followup ${overdue ? 'due' : ''}">
+        <span><b>${overdue ? 'Due' : 'On'} ${escapeHtml(shortDate(due))}</b>${p.followUpNote ? `<span>${escapeHtml(p.followUpNote)}</span>` : ''}</span>
+        <span class="row-pills"><button type="button" class="btn btn-small btn-ok" data-fu-done>${ico('check')}Done</button><button type="button" class="link-btn" data-fu-edit>Change</button></span>
+      </div>`;
+    box.querySelector('[data-fu-done]').addEventListener('click', () => saveFollowUp(box, p, null, ''));
+    box.querySelector('[data-fu-edit]').addEventListener('click', () => followUpForm(box, p));
+    return;
+  }
+  box.innerHTML = '<button type="button" class="add-tag" data-fu-add>+ Remind me to follow up</button>';
+  box.querySelector('[data-fu-add]').addEventListener('click', () => followUpForm(box, p));
+}
+
+function followUpForm(box, p) {
+  const current = p.followUpAt ? new Date(p.followUpAt) : inDays(1);
+  box.innerHTML = `
+    <div class="followup-form">
+      <div class="quick-dates">
+        <button type="button" class="chip-btn" data-days="1">Tomorrow</button>
+        <button type="button" class="chip-btn" data-days="3">In 3 days</button>
+        <button type="button" class="chip-btn" data-days="7">Next week</button>
+        <input type="date" data-fu-date value="${dateInputValue(current)}" aria-label="Remind me on" />
+      </div>
+      <input class="plain-input" data-fu-note value="${escapeHtml(p.followUpNote || '')}" placeholder="What about? e.g. send the Diwali box price" maxlength="200" aria-label="What about" />
+      <div class="note-row"><button type="button" class="btn btn-small btn-dark" data-fu-save>Save reminder</button><button type="button" class="link-btn" data-fu-cancel>Cancel</button></div>
+      <p class="muted">It shows on Home under "Needs your attention" on that day.</p>
+    </div>`;
+  const dateInput = box.querySelector('[data-fu-date]');
+  for (const b of box.querySelectorAll('[data-days]')) {
+    b.addEventListener('click', () => (dateInput.value = dateInputValue(inDays(Number(b.dataset.days)))));
+  }
+  box.querySelector('[data-fu-cancel]').addEventListener('click', () => renderFollowUp(box, p));
+  box.querySelector('[data-fu-save]').addEventListener('click', () => {
+    if (!dateInput.value) return toast('Pick a date');
+    const [y, m, d] = dateInput.value.split('-').map(Number);
+    saveFollowUp(box, p, new Date(y, m - 1, d, 10, 0, 0), box.querySelector('[data-fu-note]').value);
+  });
+}
+
+async function saveFollowUp(box, p, at, note) {
+  try {
+    const res = await patch(`/api/customers/${p.phone}`, { followUpAt: at ? at.toISOString() : null, followUpNote: note });
+    p.followUpAt = res.followUpAt;
+    p.followUpNote = res.followUpNote;
+    toast(at ? `Reminder set for ${shortDate(at)}` : 'Done');
+    renderFollowUp(box, p);
+  } catch (err) {
+    toast(`Not saved: ${err.message}`);
+  }
+}
+
+// ---------- Birthday ----------
+function renderBirthday(box, p) {
+  if (p.birthday) {
+    const [m, d] = p.birthday.split('-').map(Number);
+    box.innerHTML = `<div class="box-row plain"><span>🎂 ${d} ${MONTHS[m - 1]}</span><button type="button" class="link-btn" data-bd-edit>Change</button></div>`;
+    box.querySelector('[data-bd-edit]').addEventListener('click', () => birthdayForm(box, p));
+    return;
+  }
+  box.innerHTML = '<button type="button" class="add-tag" data-bd-add>+ Add birthday</button>';
+  box.querySelector('[data-bd-add]').addEventListener('click', () => birthdayForm(box, p));
+}
+
+function birthdayForm(box, p) {
+  const [m, d] = p.birthday ? p.birthday.split('-').map(Number) : [0, 0];
+  box.innerHTML = `
+    <div class="row-fields">
+      <select data-bd-day aria-label="Day"><option value="">Day</option>${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${d === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select>
+      <select data-bd-month aria-label="Month"><option value="">Month</option>${MONTHS.map((name, i) => `<option value="${i + 1}" ${m === i + 1 ? 'selected' : ''}>${name}</option>`).join('')}</select>
+    </div>
+    <div class="note-row"><button type="button" class="btn btn-small btn-dark" data-bd-save>Save</button>${p.birthday ? '<button type="button" class="link-btn" data-bd-clear>Remove</button>' : ''}<button type="button" class="link-btn" data-bd-cancel>Cancel</button></div>`;
+  const save = async (value) => {
+    try {
+      const res = await patch(`/api/customers/${p.phone}`, { birthday: value });
+      p.birthday = res.birthday;
+      renderBirthday(box, p);
+    } catch (err) {
+      toast(`Not saved: ${err.message}`);
+    }
+  };
+  box.querySelector('[data-bd-save]').addEventListener('click', () => {
+    const day = Number(box.querySelector('[data-bd-day]').value);
+    const month = Number(box.querySelector('[data-bd-month]').value);
+    if (!day || !month) return toast('Pick a day and a month');
+    save(`${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+  });
+  const clear = box.querySelector('[data-bd-clear]');
+  if (clear) clear.addEventListener('click', () => save(''));
+  box.querySelector('[data-bd-cancel]').addEventListener('click', () => renderBirthday(box, p));
+}
+
+// ---------- History ----------
+const HISTORY_ICONS = {
+  order: 'box',
+  cancel: 'close',
+  chat: 'chat',
+  campaign: 'megaphone',
+  cart_link: 'cart',
+  reminder: 'bell',
+  cart: 'cart',
+  ticket: 'alert',
+  resolved: 'check',
+  restock: 'refresh',
+  optin: 'check',
+  optout: 'close',
+};
+
+async function loadHistory(box, phone, limit) {
+  try {
+    const h = await api(`/api/customers/${phone}/timeline?limit=${limit}`);
+    if (!box.isConnected) return;
+    if (!h.events.length) {
+      box.innerHTML = '<div class="box"><div class="box-empty">Nothing yet.</div></div>';
+      return;
+    }
+    box.innerHTML = `
+      <ol class="history">
+        ${h.events
+          .map(
+            (e) => `<li class="h-${e.kind}"><span class="h-ico">${icon(HISTORY_ICONS[e.kind] || 'clock')}</span><span class="h-main"><span>${escapeHtml(e.text)}</span>${e.detail ? `<small>${escapeHtml(e.detail)}</small>` : ''}</span><time>${escapeHtml(shortDate(e.at))}</time></li>`
+          )
+          .join('')}
+      </ol>
+      ${h.more ? '<button type="button" class="link-btn" data-history-more>Show everything</button>' : ''}`;
+    const more = box.querySelector('[data-history-more]');
+    if (more) more.addEventListener('click', () => loadHistory(box, phone, 300));
+  } catch (err) {
+    box.innerHTML = `<div class="muted">${escapeHtml(err.message)}</div>`;
+  }
 }
 
 function renderTags(box, p, opts) {

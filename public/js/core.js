@@ -210,12 +210,29 @@ export const AUTO_LABELS = {
 
 export const SEGMENT_LABELS = {
   all: 'Everyone',
+  new: 'New',
+  second_order: 'Needs 2nd order',
+  loyal: 'Loyal',
   vip: 'VIP',
+  at_risk: 'At risk',
+  lost: 'Lost',
+  no_orders: 'No orders yet',
+  // Older groups, still used by earlier campaigns.
   returning: 'Returning',
   one_order: 'Ordered once',
   lapsed: 'Lapsed 45+ days',
-  no_orders: 'No orders yet',
   opted_in: 'Opted in to offers',
+};
+
+// Customer stages, for the pill on each customer.
+export const STAGE_PILLS = {
+  new: 'pill-green',
+  second_order: 'pill-amber',
+  loyal: 'pill-green',
+  vip: 'pill-vip',
+  at_risk: 'pill-clay',
+  lost: 'pill-red',
+  no_orders: '',
 };
 
 // ---------- Icons ----------

@@ -1,5 +1,5 @@
 // Home: today at a glance and who needs the founder first.
-import { state, api, el, escapeHtml, displayName, avatar, ago, money, ico, ISSUE_LABELS, setInboxCount, isCurrent, plural } from './core.js';
+import { state, api, el, escapeHtml, displayName, avatar, ago, money, ico, ISSUE_LABELS, setInboxCount, isCurrent, plural, shortDate } from './core.js';
 import { setFilter } from './inbox.js';
 
 function greeting() {
@@ -13,7 +13,18 @@ function attentionRow(a) {
   let title;
   let pill;
   let href = a.conversationId ? `#/inbox/${a.conversationId}` : '#/orders';
-  if (a.kind === 'needs_reply') {
+  let sub = `${a.kind === 'cod_cancel' ? 'asked' : 'waiting'} ${ago(a.since)}`;
+  if (a.kind === 'follow_up') {
+    title = a.note ? `Follow up: ${a.note}` : 'Follow up with them';
+    pill = '<span class="pill pill-amber">Reminder</span>';
+    href = `#/customers/${a.customerPhone}`;
+    sub = `due ${shortDate(a.since)}`;
+  } else if (a.kind === 'birthday') {
+    title = 'Birthday today 🎂';
+    pill = '<span class="pill pill-green">Birthday</span>';
+    href = `#/customers/${a.customerPhone}`;
+    sub = 'say happy birthday';
+  } else if (a.kind === 'needs_reply') {
     title = a.preview || 'New message';
     pill = '<span class="pill pill-clay">Needs reply</span>';
   } else if (a.kind === 'cod_cancel') {
@@ -33,7 +44,7 @@ function attentionRow(a) {
       ${avatar(a)}
       <span class="attention-main">
         <span class="attention-title">${escapeHtml(title)}</span>
-        <span class="attention-sub">${escapeHtml(displayName(a))} · ${a.kind === 'cod_cancel' ? 'asked' : 'waiting'} ${escapeHtml(ago(a.since))}</span>
+        <span class="attention-sub">${escapeHtml(displayName(a))} · ${escapeHtml(sub)}</span>
       </span>
       ${pill}
     </a>`;
