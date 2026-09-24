@@ -366,12 +366,12 @@ function renderBar() {
   const bulk = bar.querySelector('[data-bulk]');
   if (bulk) {
     bulk.addEventListener('click', async () => {
-      const ok = confirm(
-        `Opt in ${notOptedIn.toLocaleString('en-IN')} customers to offers on WhatsApp?\n\nOnly do this if they already agreed to get offers from you on WhatsApp (for example in Zoko or at checkout). Anyone who replied STOP stays out, and anyone can reply STOP later.`
+      const reason = prompt(
+        `Opt in ${notOptedIn.toLocaleString('en-IN')} customers to offers on WhatsApp?\n\nOnly if every one of them already agreed to get offers from Thakar Kitchen on WhatsApp. Anyone who replied STOP stays out.\n\nWhere did they agree? This is saved on each customer as proof (e.g. "Opted in on Zoko, Aug 2026").`
       );
-      if (!ok) return;
+      if (!reason || reason.trim().length < 3) return;
       try {
-        const r = await post('/api/customers/bulk-opt-in', { segment: list.segment, filters: list.filters, confirm: true });
+        const r = await post('/api/customers/bulk-opt-in', { segment: list.segment, filters: list.filters, confirm: true, reason: reason.trim() });
         toast(`${plural(r.changed, 'customer')} opted in`);
         refresh();
       } catch (err) {
@@ -411,14 +411,14 @@ async function renderGrow() {
         <p>Have a list from Zoko or a spreadsheet? Save it as a CSV file and add it here. The phone number column is found automatically.</p>
         <label class="file-pick"><input type="file" accept=".csv,text/csv" data-file /><span class="btn btn-small">Choose CSV file</span><span class="muted" data-file-name>No file chosen</span></label>
         <label class="check-line"><input type="checkbox" data-import-optin /> They agreed to get offers from Thakar Kitchen on WhatsApp</label>
+        <input class="plain-input hidden" data-import-reason placeholder="Where did they agree? e.g. Opted in on Zoko" maxlength="200" />
         <input class="plain-input" data-import-tag placeholder="Tag them, e.g. Zoko (optional)" maxlength="30" />
         <div data-import-result></div>
       </div>
       <div class="grow-item">
         <h3><span>2</span> People who agreed at checkout</h3>
         <div class="grow-row">
-          <p><b>${plural(g.shopifyConsent, 'customer')}</b> accepted marketing when they ordered (Shopify's checkbox).</p>
-          ${g.shopifyConsentOn ? '<span class="pill pill-green">On: added automatically</span>' : g.shopifyConsent ? '<button type="button" class="btn btn-small" data-shopify>Add them</button>' : ''}
+          <p><b>${plural(g.shopifyWhatsApp, 'customer')}</b> agreed to WhatsApp marketing in Shopify. They're added automatically. (Shopify's SMS consent isn't used: it isn't permission for WhatsApp.)</p>
         </div>
         <div class="grow-row">
           <p><b>${plural(g.checkoutConsent, 'person', 'people')}</b> ticked the WhatsApp box at checkout but didn't finish their order.</p>
@@ -449,26 +449,13 @@ async function renderGrow() {
     renderGrow();
   });
   wireImport(card);
-  const shopifyBtn = q('[data-shopify]');
-  if (shopifyBtn) {
-    shopifyBtn.addEventListener('click', async () => {
-      if (!confirm(`Add the ${g.shopifyConsent.toLocaleString('en-IN')} customers who accepted marketing at checkout to your offers list?\n\nNew customers who accept it will be added automatically too. You can turn this off on the Automations page.`)) return;
-      try {
-        const r = await put('/api/automations/optin-shopify', { enabled: true });
-        toast(`${plural(r.changed, 'customer')} added`);
-        renderGrow();
-        refresh();
-      } catch (err) {
-        toast(err.message);
-      }
-    });
-  }
   const checkoutBtn = q('[data-checkout]');
   if (checkoutBtn) {
     checkoutBtn.addEventListener('click', async () => {
-      if (!confirm(`Add the ${g.checkoutConsent.toLocaleString('en-IN')} people who ticked the WhatsApp box at checkout?\n\nOnly do this if that box asks customers to get offers on WhatsApp. Anyone who replied STOP stays out.`)) return;
+      const reason = prompt(`Add the ${g.checkoutConsent.toLocaleString('en-IN')} people who ticked the WhatsApp box at checkout to offers?\n\nOnly if that box asks customers to get offers on WhatsApp. Anyone who replied STOP stays out.\n\nWhat does the box say? Saved as proof on each customer.`, 'Ticked the WhatsApp box at Magic Checkout');
+      if (!reason || reason.trim().length < 3) return;
       try {
-        const r = await post('/api/customers/grow/checkout', { confirm: true });
+        const r = await post('/api/customers/grow/checkout', { confirm: true, reason: reason.trim() });
         toast(`${plural(r.changed, 'person', 'people')} added`);
         renderGrow();
         refresh();
@@ -515,6 +502,7 @@ function wireImport(card) {
   const q = (s) => card.querySelector(s);
   const result = q('[data-import-result]');
   let csv = '';
+  let fileName = '';
   const preview = async () => {
     if (!csv) return;
     result.innerHTML = '<div class="muted">Reading the file…</div>';
@@ -536,11 +524,13 @@ function wireImport(card) {
       }
       result.innerHTML = `<div class="import-preview">${lines.map((l) => `<p>${l}</p>`).join('')}<button type="button" class="btn btn-small btn-primary" data-import-go>Import ${plural(r.people, 'person', 'people')}</button></div>`;
       result.querySelector('[data-import-go]').addEventListener('click', async (e) => {
+        const reason = q('[data-import-reason]').value.trim();
+        if (optIn && reason.length < 3) return toast('Say where they agreed (saved as proof on each customer)');
         if (optIn && !confirm('Confirm these people agreed to get offers from Thakar Kitchen on WhatsApp?')) return;
         e.target.disabled = true;
         e.target.textContent = 'Importing…';
         try {
-          const done = await post('/api/customers/import', { csv, optIn, confirm: optIn, tag: q('[data-import-tag]').value, dryRun: false });
+          const done = await post('/api/customers/import', { csv, optIn, confirm: optIn, reason, fileName, tag: q('[data-import-tag]').value, dryRun: false });
           toast(`Imported. ${plural(done.newCustomers, 'new customer')}${optIn ? `, ${plural(done.willOptIn, 'person', 'people')} added to offers` : ''}.`);
           csv = '';
           renderGrow();
@@ -558,6 +548,7 @@ function wireImport(card) {
     const file = e.target.files[0];
     if (!file) return;
     q('[data-file-name]').textContent = file.name;
+    fileName = file.name;
     if (file.size > 7 * 1024 * 1024) {
       result.innerHTML = '<p class="warn">That file is too big (over 7 MB). Export only the name and phone columns.</p>';
       return;
@@ -565,7 +556,10 @@ function wireImport(card) {
     csv = await file.text();
     preview();
   });
-  q('[data-import-optin]').addEventListener('change', preview);
+  q('[data-import-optin]').addEventListener('change', (e) => {
+    q('[data-import-reason]').classList.toggle('hidden', !e.target.checked);
+    preview();
+  });
 }
 
 // ---------- Refresh & detail ----------

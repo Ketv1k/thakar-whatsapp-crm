@@ -82,6 +82,15 @@ const CATALOG = [
     examples: ['Priya', 'Methi Papad', 'https://thakarkitchen.com'],
     quickReplies: [STOP_BUTTON],
   },
+  {
+    // To your own number (FOUNDER_PHONE), when a ticket waits too long and
+    // you haven't messaged the business number in the last 24 hours.
+    name: 'team_ticket_alert',
+    label: 'Ticket waiting (alert to you)',
+    category: 'UTILITY',
+    body: 'Thakar Kitchen inbox: ticket #{{1}} ({{2}}) has been waiting for a reply for {{3}} hours. Open the inbox to answer it.',
+    examples: ['1042', 'Late delivery', '6'],
+  },
 ];
 
 // Meta's component list for a simple template: body (+ example values) and
@@ -213,7 +222,7 @@ function metaReady() {
 }
 
 function metaApi() {
-  const version = process.env.WHATSAPP_API_VERSION || 'v20.0';
+  const version = process.env.WHATSAPP_API_VERSION || 'v25.0';
   return axios.create({
     baseURL: `https://graph.facebook.com/${version}/${process.env.WHATSAPP_BUSINESS_ACCOUNT_ID}`,
     headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` },

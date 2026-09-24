@@ -114,6 +114,17 @@ async function addOrderTags(shopifyGid, tags) {
   if (errors.length) throw new Error(errors.map((e) => e.message).join('; '));
 }
 
+async function removeOrderTags(shopifyGid, tags) {
+  const data = await graphql(
+    `mutation RemoveTags($id: ID!, $tags: [String!]!) {
+      tagsRemove(id: $id, tags: $tags) { userErrors { field message } }
+    }`,
+    { id: shopifyGid, tags }
+  );
+  const errors = data?.tagsRemove?.userErrors || [];
+  if (errors.length) throw new Error(errors.map((e) => e.message).join('; '));
+}
+
 const PRODUCT_FIELDS = `
   id title handle onlineStoreUrl status tracksInventory totalInventory
   variants(first: 20) { edges { node { id title availableForSale price } } }
@@ -375,6 +386,7 @@ module.exports = {
   storeUrl,
   adminOrderUrl,
   addOrderTags,
+  removeOrderTags,
   searchProducts,
   productsByIds,
   variantsByIds,

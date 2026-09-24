@@ -32,6 +32,12 @@ const messageSchema = new mongoose.Schema(
     statusAt: { type: Date, default: null },
     statusError: { type: String, default: undefined },
     sentByFounder: { type: Boolean, default: false },
+    // An incoming message still being handled (removed once replies/tickets
+    // are done); holds what's needed to finish it after a crash.
+    pending: {
+      type: new mongoose.Schema({ caption: String, preview: String, payload: String, attempts: Number }, { _id: false }),
+      default: undefined,
+    },
     // Who on the team sent it (replies and cart links).
     sentBy: {
       type: new mongoose.Schema({ id: String, name: String }, { _id: false }),
@@ -86,5 +92,7 @@ messageSchema.index(
   { unique: true, partialFilterExpression: { campaignId: { $type: 'objectId' } } }
 );
 messageSchema.index({ autoAck: 1, createdAt: -1 });
+// Finding incoming messages that were never fully handled (webhook.recoverUnfinished).
+messageSchema.index({ createdAt: 1 }, { partialFilterExpression: { pending: { $exists: true } } });
 
 module.exports = mongoose.model('Message', messageSchema);

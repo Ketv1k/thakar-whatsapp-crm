@@ -14,6 +14,7 @@ const stockAlertSchema = new mongoose.Schema(
     // 'waiting' | 'sent' | 'cancelled' | 'failed' | 'expired'
     status: { type: String, default: 'waiting', index: true },
     sentAt: { type: Date, default: null },
+    sendAttempts: { type: Number, default: 0 },
     note: { type: String, default: null },
     simulated: { type: Boolean, default: false },
   },

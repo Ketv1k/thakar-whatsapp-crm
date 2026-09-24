@@ -72,7 +72,10 @@ public/                 Founder Inbox - installable web app (no build step; ES m
    emoji-only messages, reactions and stickers get no reply; the same kind of acknowledgment isn't
    repeated within `ACK_COOLDOWN_HOURS`, and none are sent while you're talking to that customer.
    Wording and keywords live in `src/services/autoAck.js`.
-5. A ticket unresolved for 6+ hours pings you directly on WhatsApp so nothing gets missed.
+5. A ticket unresolved for 6+ hours (`SLA_HOURS`) sends you a notification and a WhatsApp message
+   on `FOUNDER_PHONE`, so nothing gets missed. WhatsApp only allows a plain message when you've
+   messaged the business number from that phone in the last 24 hours; otherwise the alert uses
+   the `team_ticket_alert` template, which Meta must approve first (Automations → Submit all).
 6. You can also manually flag any chat as a ticket from the app, as a safety net for anything the
    keyword matching misses.
 
@@ -93,8 +96,8 @@ npm install
 3. Under **Configuration**, set your webhook URL to `https://<your-domain>/webhook` and the verify token
    to whatever you put in `WHATSAPP_VERIFY_TOKEN`. Subscribe to the `messages` field.
 4. Copy your **App Secret** (Settings → Basic) into `WHATSAPP_APP_SECRET`. The webhook uses it to verify
-   Meta's `X-Hub-Signature-256` on every incoming POST and reject forged requests. If you leave it blank
-   the server still runs but logs a warning and accepts unauthenticated webhooks — set it before going live.
+   Meta's `X-Hub-Signature-256` on every incoming POST and reject forged requests. **It is required**:
+   without it every incoming message is refused (and an error is logged), so nobody can send fake ones.
 
 ### 3. Connect Shopify
 Either of these works — pick one:
@@ -190,7 +193,8 @@ and scores but can't write text.
 Set `TEST_MODE=true` and:
 - the inbox shows a "Test mode" label and a **Test** page, where you can also place pretend
   orders (prepaid or COD), tap the customer's Confirm / Cancel, ship and deliver them, leave a
-  cart, and trigger reorder and back-in-stock messages - all through the real automation code;
+  cart, and trigger reorder and back-in-stock messages - all through the real automation code
+  (untick "They agreed to WhatsApp order updates" to see an order that gets no messages);
 - on the Test page you pick one of your real Shopify customers (or type any number), choose or
   type their message (or send a photo / voice note), and see exactly what happens:
   auto-answered from Shopify, a ticket created, or waiting in the Inbox, plus the reply the
@@ -208,13 +212,23 @@ Turn it off (`TEST_MODE=false` or remove it) once WhatsApp is connected.
 
 `render.yaml` is a Render Blueprint. In Render: **New → Blueprint** → pick this repo → paste the
 secret values it asks for (`INBOX_API_KEY`, `MONGODB_URI`, `SHOPIFY_CLIENT_ID`,
-`SHOPIFY_CLIENT_SECRET`) → **Apply**. It starts on the free plan in test mode; switch the plan to
-Starter and remove `TEST_MODE` when going live with WhatsApp.
+`SHOPIFY_CLIENT_SECRET`, and the `WHATSAPP_*` ones plus `FOUNDER_PHONE`, which can stay empty
+until WhatsApp is connected) → **Apply**. It starts on the free plan in test mode; switch the
+plan to Starter and remove `TEST_MODE` when going live with WhatsApp.
 
 ## Production hardening (built in)
 - **Webhook authenticity** — every `POST /webhook` is checked against Meta's `X-Hub-Signature-256`
-  using `WHATSAPP_APP_SECRET` (fails closed when the secret is set). The `GET` handshake still uses
-  `WHATSAPP_VERIFY_TOKEN`.
+  using `WHATSAPP_APP_SECRET`; unsigned or wrongly signed calls are refused, and so is everything
+  if the secret isn't set. The `GET` handshake still uses `WHATSAPP_VERIFY_TOKEN`.
+- **No lost messages** — Meta's webhook is answered straight away, so each incoming message is
+  saved first and marked unfinished until the reply, ticket and acknowledgment are done. If the
+  server restarts in between, a job every 5 minutes finishes it (unless you already answered);
+  it gives up after 3 tries.
+- **Retries** — a template message WhatsApp couldn't send for a temporary reason (rate limit,
+  WhatsApp down, network) is tried again on the next run, up to 3 times in all; permanent
+  errors (bad number, template not approved) are not retried.
+- **API version** — Meta's Graph API `v25.0` by default (`WHATSAPP_API_VERSION`); older versions
+  stop working on Meta's schedule, so don't pin an old one.
 - **Duplicate deliveries** — Meta retries webhooks, so inbound messages are de-duplicated on the
   WhatsApp message id (unique index + pre-check). A retried message won't double-reply or open a
   second ticket.
@@ -297,6 +311,19 @@ since its last check (so it catches up after the server slept) and sends:
 - **Shipped** — with the tracking link (India Post) or the order status page.
 - **Out for delivery / Delivered** — only if your courier updates delivery status in Shopify.
 
+**Permission.** WhatsApp only lets you message customers who agreed to it. By default order
+updates go only to customers who agreed on WhatsApp: opted in to offers, ticked the WhatsApp box
+in Magic Checkout, or replied START. If your checkout tells every customer they'll get order
+updates on WhatsApp, paste those exact words on Automations → **Who may get WhatsApp messages**
+and confirm; from then on every customer gets order updates (the words, who confirmed and when
+are kept as proof). Anyone who replied **STOP ALL** gets nothing. Each order that was skipped
+says why on its row.
+
+**Change of mind on COD.** A customer can change their answer until the order is shipped or
+cancelled: the old WhatsApp tag is removed from the order in Shopify before the new one is added,
+and a cancel-then-confirm sends you a notification ("don't cancel it"). After shipping or
+cancelling, the buttons only get a reply.
+
 Safety: each update is sent at most once (claimed in the database first); an automation only acts
 on things that happen after you switch it on; updates that are too old to be useful are dropped;
 if several are due at once only the newest goes. These are *utility* templates: about ₹0.14 each
@@ -328,22 +355,33 @@ incl. GST, free if the customer messaged you in the last 24 hours.
   and are imported by **Refresh** on the Automations page.
 - Campaigns only go to customers who **opted in to offers**, and skip anyone who got an offer in
   the last `CAMPAIGN_MIN_GAP_HOURS` (24). Each person gets a campaign once, even if sending is
-  interrupted. Sending stops by itself if WhatsApp keeps refusing.
+  interrupted, and someone who replies STOP while a campaign is going out is skipped (each
+  person is checked again just before their message). Sending stops by itself if WhatsApp keeps
+  refusing.
 
 ### Who gets offers (opt-in)
 
-WhatsApp only allows marketing to people who agreed to it. A customer is opted in when:
-you switch it on in their profile; they reply **START**; you opt in a whole group on the
-Customers page (only if they already agreed elsewhere, e.g. in Zoko); or — if you turn it on in
-Automations — they accepted marketing at checkout in Shopify. Replying **STOP** (or tapping
-**Stop promotions**) opts them out; order updates still reach them.
+WhatsApp only allows marketing to people who agreed to it, and Meta can ask how they agreed —
+so every opt-in keeps a line of proof ("Sent "START" on WhatsApp on 24 Sept 2026", "Agreed in
+Zoko — group opt-in by Ketvik on …"), shown on the customer's profile. A customer is opted in when:
+
+- they reply **START** (or send the offers-link message);
+- you switch it on in their profile — you're asked how they agreed, and it isn't saved without an answer;
+- you opt in a group or import a list on the Customers page — you're asked where they agreed
+  (only do this if they really did, e.g. in Zoko);
+- they agreed to **WhatsApp** marketing in Shopify (Shopify's WhatsApp consent — SMS or email
+  consent doesn't count).
+
+Replying **STOP** (or tapping **Stop promotions**) stops offers; order updates still reach them.
+Replying **STOP ALL** stops every WhatsApp message, order updates included. **START** undoes both.
 
 **Grow your offers list** (Customers page) brings the ways in together:
 1. **Import a list** — a CSV (e.g. a Zoko export). The phone, name and any opt-in column are
    found automatically; a preview shows what will happen before anything changes. Tick "They
    agreed to get offers" to opt them in (only rows marked yes if the file has an opt-in column).
-2. **People who agreed at checkout** — Shopify's marketing checkbox, and people who ticked the
-   WhatsApp box in Magic Checkout but didn't finish.
+2. **People who agreed at checkout** — people who ticked the WhatsApp box in Magic Checkout
+   but didn't finish (you're asked for the checkbox's wording as proof), and a count of those
+   who agreed to WhatsApp marketing in Shopify (added automatically).
 3. **A link and QR code** — `wa.me/<your number>?text=Yes, send me offers`; sending that message
    opts them in, like START.
 
@@ -363,7 +401,8 @@ Anyone who replied STOP is always left out.
 - **Reorder reminders** — 14/21/30/45 days after an order ships, naming what they bought; skipped
   if they ordered again; at most one a month per customer.
 - **Back-in-stock** — on a customer's profile, search a product (or a sold-out size) they asked
-  about; every half hour the app checks Shopify and messages everyone waiting once it's back.
+  about; every half hour the app checks Shopify and messages everyone waiting once it's back
+  (for a whole product, as soon as any size is back).
 
 All three are marketing messages: opted-in customers only (cart reminders also accept the
 consent given at checkout; back-in-stock needs only the customer's own request), never at night
@@ -402,7 +441,8 @@ is optional.
 - **Two-way customers**: customer tags and notes come from Shopify, and changes made in the app
   go back to Shopify straight away (retried if Shopify doesn't answer). The first time, anything
   written in the app that Shopify doesn't have is added to Shopify, so nothing is lost. Who gets
-  WhatsApp offers is written to Shopify's WhatsApp marketing consent (not in test mode).
+  WhatsApp offers is written to Shopify's WhatsApp marketing consent (not in test mode), and
+  customers who agreed to WhatsApp marketing in Shopify are opted in here.
 - **Orders next to the chat**: **Details** on any order shows items, prices, payment, what's
   left to collect, the address, tracking, note and tags, with **Open in Shopify**, **Send
   tracking in chat**, **Add note**, **Add tag** and (owner) **Cancel order** — cancelling
@@ -411,13 +451,16 @@ is optional.
 
 ## Going live checklist
 
-1. Connect WhatsApp (the `WHATSAPP_*` settings) and set `WHATSAPP_BUSINESS_ACCOUNT_ID`.
+1. Connect WhatsApp (the `WHATSAPP_*` settings), including `WHATSAPP_APP_SECRET` (incoming
+   messages are refused without it) and `WHATSAPP_BUSINESS_ACCOUNT_ID`. Set `FOUNDER_PHONE`.
 2. Remove `TEST_MODE` (or set it to `false`).
-3. Automations → **Submit all to Meta**. Approval usually takes minutes to a day; **Refresh**
-   shows the status. Nothing that needs a template is sent until it's approved.
-4. Switch on the automations you want. Decide who gets offers (see above).
-5. On Render, switch to a paid plan so the background jobs run all the time.
+3. Automations → **Submit all to Meta** (this includes `team_ticket_alert` for your overdue-ticket
+   alerts). Approval usually takes minutes to a day; **Refresh** shows the status. Nothing that
+   needs a template is sent until it's approved.
+4. Automations → **Who may get WhatsApp messages**: if your checkout says customers get order
+   updates on WhatsApp, paste those words and confirm; otherwise only customers who agreed get them.
+5. Switch on the automations you want. Decide who gets offers (see above).
+6. On Render, switch to a paid plan so the background jobs run all the time.
 
 ## Ideas for later
 - Product catalog messages
-- Several team members with their own logins

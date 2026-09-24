@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 function apiVersion() {
-  return process.env.WHATSAPP_API_VERSION || 'v20.0';
+  return process.env.WHATSAPP_API_VERSION || 'v25.0';
 }
 
 function client() {
@@ -151,6 +151,17 @@ function testTone() {
 
 // A short, readable reason from a failed WhatsApp API call, e.g.
 // "(#131047) Re-engagement message".
+// Worth trying again later? Network problems, timeouts, rate limits and
+// Meta's temporary errors are; a bad number or a rejected template is not.
+const TEMPORARY_CODES = new Set([1, 2, 4, 17, 341, 80007, 130429, 131000, 131016, 131048, 131056, 133004]);
+function isRetryable(err) {
+  if (!err) return false;
+  if (!err.response) return true; // never reached Meta, or no answer (timeout)
+  const status = err.response.status;
+  const code = err.response.data && err.response.data.error && err.response.data.error.code;
+  return status === 429 || status >= 500 || TEMPORARY_CODES.has(code);
+}
+
 function describeError(err) {
   const e = err && err.response && err.response.data && err.response.data.error;
   if (!e) return (err && err.message) || 'Send failed';
@@ -158,4 +169,4 @@ function describeError(err) {
   return `${e.code ? `(#${e.code}) ` : ''}${detail}`.slice(0, 300);
 }
 
-module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead, downloadMedia, describeError, testMode };
+module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead, downloadMedia, describeError, isRetryable, testMode };

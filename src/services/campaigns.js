@@ -83,6 +83,24 @@ function problems(campaign, template) {
 
 // Claims one recipient, sends, records. Returns 'sent' | 'failed' | 'already'.
 async function sendOne(campaign, template, customer) {
+  // Checked again right now, in one step: a STOP that arrived after the list
+  // was read wins, and no one gets two offers within the gap.
+  const now = new Date();
+  const before = await Customer.findOneAndUpdate(
+    {
+      phone: customer.phone,
+      optedInMarketing: true,
+      noWhatsApp: { $ne: true },
+      $or: [{ lastMarketingAt: null }, { lastMarketingAt: { $lt: new Date(now.getTime() - gapHours() * HOUR) } }],
+    },
+    { $set: { lastMarketingAt: now } },
+    { new: false }
+  )
+    .select('lastMarketingAt')
+    .lean();
+  if (!before) return { result: 'skipped' };
+  const undo = () => Customer.updateOne({ phone: customer.phone, lastMarketingAt: now }, { $set: { lastMarketingAt: before.lastMarketingAt || null } });
+
   const bodyParams = paramsFor(campaign, customer);
   const body = templates.render(template, bodyParams);
   const conversation = await outbound.conversationFor(customer.phone, body);
@@ -102,6 +120,7 @@ async function sendOne(campaign, template, customer) {
       test: whatsapp.testMode() ? true : undefined,
     });
   } catch (err) {
+    await undo();
     if (err && err.code === 11000) return { result: 'already' };
     throw err;
   }
@@ -116,7 +135,6 @@ async function sendOne(campaign, template, customer) {
     message.status = 'sent';
     message.statusAt = new Date();
     await message.save();
-    await Customer.updateOne({ phone: customer.phone }, { $set: { lastMarketingAt: new Date() } });
     return { result: 'sent' };
   } catch (err) {
     const error = whatsapp.describeError(err);
@@ -124,6 +142,7 @@ async function sendOne(campaign, template, customer) {
     message.statusError = error;
     message.statusAt = new Date();
     await message.save();
+    await undo();
     return { result: 'failed', error, code: err?.response?.data?.error?.code };
   }
 }
@@ -186,7 +205,7 @@ async function run(campaignId) {
       } else if (out.result === 'sent') {
         consecutiveFailures = 0;
       }
-      if (out.result !== 'already') await sleep(SEND_GAP_MS);
+      if (out.result === 'sent' || out.result === 'failed') await sleep(SEND_GAP_MS);
     }
     const counts = await refreshCounts(campaign._id);
     const stoppedEarly = consecutiveFailures >= MAX_CONSECUTIVE_FAILURES;

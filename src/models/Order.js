@@ -36,6 +36,7 @@ const orderSchema = new mongoose.Schema(
     shopifyTest: { type: Boolean, default: false },
     // Made by test mode's "place a test order" - never exists in Shopify.
     simulated: { type: Boolean, default: false },
+    testAgreed: { type: Boolean, default: undefined },
     total: { type: Number, default: 0 },
     outstanding: { type: Number, default: 0 },
     currency: { type: String, default: 'INR' },
@@ -70,6 +71,8 @@ const orderSchema = new mongoose.Schema(
     },
     // Why an update was skipped or failed, per event, for the Automations page.
     notifyNotes: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Failed tries per update, so temporary WhatsApp problems are retried a few times.
+    sendAttempts: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true, minimize: false }
 );

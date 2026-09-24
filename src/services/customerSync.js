@@ -6,6 +6,7 @@ const Customer = require('../models/Customer');
 const shopify = require('./shopify');
 const settings = require('./settings');
 const customerStatus = require('./customerStatus');
+const consent = require('./consent');
 const { normalizePhone } = require('../utils/phone');
 
 const PAGE_SIZE = 100;
@@ -19,6 +20,7 @@ const CUSTOMER_FIELDS = `
   lastOrder { createdAt }
   defaultAddress { city province zip phone }
   smsMarketingConsent { marketingState }
+  defaultPhoneNumber { whatsAppMarketingConsent { state updatedAt } }
 `;
 const MAX_TAGS = 50;
 
@@ -75,6 +77,10 @@ function mapCustomer(node) {
     },
     shopifyTags: Array.isArray(node.tags) ? node.tags : null,
     shopifyNote: node.note || '',
+    // Shopify's own record of WhatsApp marketing consent (not SMS).
+    whatsAppConsent: node.defaultPhoneNumber?.whatsAppMarketingConsent
+      ? { state: node.defaultPhoneNumber.whatsAppMarketingConsent.state, updatedAt: node.defaultPhoneNumber.whatsAppMarketingConsent.updatedAt || null }
+      : null,
   };
 }
 
@@ -83,20 +89,37 @@ async function optInFromShopifyEnabled() {
   return !!s.enabled;
 }
 
-async function saveCustomer(mapped, useConsent) {
-  const existing = await Customer.findOne({ phone: mapped.phone }).select('name optedInMarketing optedOutAt tags notes tagsPulledAt shopifyPush').lean();
+// Pure: what Shopify's WhatsApp marketing consent changes here. SUBSCRIBED
+// opts them in (unless they said STOP here more recently); UNSUBSCRIBED
+// in Shopify after they opted in here opts them out. SMS consent is never
+// used for WhatsApp.
+function consentFromShopify(existing, waConsent) {
+  if (!waConsent || !waConsent.state) return {};
+  const at = waConsent.updatedAt ? new Date(waConsent.updatedAt) : new Date();
+  const e = existing || {};
+  if (waConsent.state === 'SUBSCRIBED') {
+    if (e.optedInMarketing) return { shopifyWaConsent: 'SUBSCRIBED' };
+    if (e.optedOutAt && new Date(e.optedOutAt) >= at) return {};
+    return {
+      ...consent.optInFields({ source: 'shopify_whatsapp', evidence: `Agreed to WhatsApp marketing in Shopify (${consent.stamp(at)})`, at }),
+      shopifyWaConsent: 'SUBSCRIBED',
+    };
+  }
+  if (waConsent.state === 'UNSUBSCRIBED' && e.optedInMarketing && (!e.optedInAt || new Date(e.optedInAt) < at)) {
+    return { optedInMarketing: false, optInSource: null, optedOutAt: at, shopifyWaConsent: 'UNSUBSCRIBED' };
+  }
+  return {};
+}
+
+async function saveCustomer(mapped) {
+  const existing = await Customer.findOne({ phone: mapped.phone })
+    .select('name optedInMarketing optedInAt optedOutAt tags notes tagsPulledAt shopifyPush')
+    .lean();
   const $set = { ...mapped.fields };
   if (mapped.shopifyTags) Object.assign($set, mergeFromShopify(existing, mapped.shopifyTags, mapped.shopifyNote));
+  Object.assign($set, consentFromShopify(existing, mapped.whatsAppConsent));
   // Shopify's name is the real one; the WhatsApp profile name can be a nickname.
   if (mapped.name && (!existing || !existing.name || existing.name === mapped.phone)) $set.name = mapped.name;
-  if (
-    useConsent &&
-    mapped.fields.marketingConsent === 'SUBSCRIBED' &&
-    !(existing && existing.optedOutAt) &&
-    !(existing && existing.optedInMarketing)
-  ) {
-    Object.assign($set, { optedInMarketing: true, optInSource: 'shopify', optedInAt: new Date() });
-  }
   await Customer.updateOne({ phone: mapped.phone }, { $set, $setOnInsert: { phone: mapped.phone } }, { upsert: true });
 }
 
@@ -105,7 +128,7 @@ async function syncOne(gid) {
   const data = await shopify.graphql(`query One($id: ID!) { customer(id: $id) { ${CUSTOMER_FIELDS} } }`, { id: gid });
   const mapped = data.customer ? mapCustomer(data.customer) : null;
   if (!mapped) return null;
-  await saveCustomer(mapped, await optInFromShopifyEnabled());
+  await saveCustomer(mapped);
   return mapped.phone;
 }
 
@@ -115,7 +138,9 @@ async function syncCustomers() {
   const upgrading = state.version !== SYNC_VERSION;
   let checkpoint = !upgrading && state.checkpoint ? new Date(state.checkpoint) : null;
   const query = checkpoint ? `updated_at:>'${new Date(checkpoint.getTime() - 2 * 60 * 1000).toISOString()}'` : '';
-  const useConsent = await optInFromShopifyEnabled();
+  // SMS consent used to be allowed to count as WhatsApp consent; it no longer
+  // does. If that switch was on, undo the opt-ins it made.
+  if (await optInFromShopifyEnabled()) await setOptInFromShopify(false);
   let after = state.cursor && !checkpoint ? state.cursor : null;
   let fetched = 0;
   let saved = 0;
@@ -139,7 +164,7 @@ async function syncCustomers() {
         fetched++;
         const mapped = mapCustomer(edge.node);
         if (mapped) {
-          await saveCustomer(mapped, useConsent);
+          await saveCustomer(mapped);
           saved++;
         }
         const updatedAt = new Date(edge.node.updatedAt);
@@ -166,18 +191,15 @@ async function syncCustomers() {
   }
 }
 
-// Turning "use Shopify marketing consent" on opts in everyone who agreed at
-// checkout (except anyone who replied STOP); turning it off undoes exactly
-// those opt-ins.
+// The old "count Shopify's (SMS) marketing consent" switch. SMS consent
+// isn't permission for WhatsApp, so it can only be turned off, which undoes
+// the opt-ins it made. WhatsApp consent recorded in Shopify is used instead
+// (consentFromShopify).
 async function setOptInFromShopify(enabled) {
-  await settings.set('optin:shopify', { enabled: !!enabled, changedAt: new Date() });
   if (enabled) {
-    const res = await Customer.updateMany(
-      { marketingConsent: 'SUBSCRIBED', optedOutAt: null, optedInMarketing: { $ne: true } },
-      { $set: { optedInMarketing: true, optInSource: 'shopify', optedInAt: new Date() } }
-    );
-    return { changed: res.modifiedCount };
+    throw Object.assign(new Error("Shopify's SMS marketing consent isn't permission for WhatsApp, so it can't be used for offers."), { status: 400, expose: true });
   }
+  await settings.set('optin:shopify', { enabled: false, changedAt: new Date() });
   const res = await Customer.updateMany(
     { optInSource: 'shopify' },
     { $set: { optedInMarketing: false, optInSource: null, optedInAt: null } }
@@ -185,4 +207,4 @@ async function setOptInFromShopify(enabled) {
   return { changed: res.modifiedCount };
 }
 
-module.exports = { mapCustomer, mergeFromShopify, syncCustomers, syncOne, setOptInFromShopify, optInFromShopifyEnabled };
+module.exports = { mapCustomer, mergeFromShopify, consentFromShopify, syncCustomers, syncOne, setOptInFromShopify, optInFromShopifyEnabled };

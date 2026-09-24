@@ -6,8 +6,9 @@
 // internet - and since we reply to `message.from`, a forger could make us send
 // WhatsApp messages to arbitrary numbers and spin up bogus tickets.
 //
-// Fail-closed when WHATSAPP_APP_SECRET is set; skip (with a loud warning) when
-// it isn't, so existing/dev setups keep working while you finish configuring it.
+// Fail-closed: without WHATSAPP_APP_SECRET every POST is refused, so a server
+// that's missing the secret can't be fed forged messages. (Test mode's
+// pretend messages don't come through here.)
 // Find the App Secret at Meta for Developers > your app > Settings > Basic.
 const crypto = require('crypto');
 
@@ -21,11 +22,11 @@ function verifyWhatsAppSignature(req, res, next) {
   const appSecret = process.env.WHATSAPP_APP_SECRET;
 
   if (!appSecret) {
-    console.warn(
-      '[webhook] WHATSAPP_APP_SECRET not set - skipping signature verification. ' +
-        'Set it (Meta app > Settings > Basic) to reject forged webhook requests.'
+    console.error(
+      '[webhook] WHATSAPP_APP_SECRET not set - refusing the webhook. ' +
+        'Set it (Meta app > Settings > Basic) so messages from Meta can be verified.'
     );
-    return next();
+    return res.sendStatus(503);
   }
 
   // Needs the exact bytes Meta hashed. app.js captures these via the json

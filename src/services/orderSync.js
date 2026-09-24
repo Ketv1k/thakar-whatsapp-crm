@@ -16,6 +16,7 @@ const automations = require('./automations');
 const templates = require('./templates');
 const outbound = require('./outbound');
 const { dueEvents } = require('./orderEvents');
+const consent = require('./consent');
 const { normalizePhone } = require('../utils/phone');
 const { formatMoney } = require('../utils/money');
 
@@ -209,6 +210,15 @@ async function sendOrderEvent(order, event) {
         ? { 'Confirm order': `COD_CONFIRM:${claimed._id}`, 'Cancel order': `COD_CANCEL:${claimed._id}` }
         : {},
   });
+  const tries = (claimed.sendAttempts && claimed.sendAttempts[event]) || 0;
+  if (outbound.shouldRetry(result, tries)) {
+    // A temporary problem: release the claim so the next run tries again.
+    await Order.updateOne(
+      { _id: claimed._id },
+      { $set: { [`notified.${event}`]: null, [`notifyNotes.${event}`]: `Will try again: ${result.error}` }, $inc: { [`sendAttempts.${event}`]: 1 } }
+    );
+    return 'retrying';
+  }
   const update = { [`notifyNotes.${event}`]: result.ok ? 'Sent' : `Failed: ${result.error}` };
   if (event === 'cod_request' && result.ok) {
     update['cod.status'] = 'awaiting';
@@ -220,7 +230,17 @@ async function sendOrderEvent(order, event) {
 
 // Works out and sends whatever this order needs now.
 async function processOrder(order, autos, now = new Date()) {
-  const { send, skip } = dueEvents(order, autos, now);
+  const due = dueEvents(order, autos, now);
+  let send = due.send;
+  const skip = [...due.skip];
+  // Only to customers with WhatsApp permission (services/consent.js).
+  if (send.length) {
+    const permission = order.simulated && order.testAgreed ? { allowed: true } : await consent.canSendOrderUpdates(order.phone);
+    if (!permission.allowed) {
+      skip.push(...send.map((event) => ({ event, reason: permission.reason })));
+      send = [];
+    }
+  }
   for (const s of skip) {
     await Order.updateOne(
       { _id: order._id, [`notified.${s.event}`]: null },

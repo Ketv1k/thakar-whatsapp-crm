@@ -299,9 +299,10 @@ test('back in stock means the waited-for size is available again', () => {
   const product = { active: true, inStock: false, variants: [{ id: 'v1', available: false }, { id: 'v2', available: true }] };
   assert.equal(isBack({ variantId: 'v1' }, product), false);
   assert.equal(isBack({ variantId: 'v2' }, product), true);
-  assert.equal(isBack({}, product), false);
-  assert.equal(isBack({}, { ...product, inStock: true }), true);
-  assert.equal(isBack({}, { ...product, active: false, inStock: true }), false);
+  // No size chosen: back as soon as any size can be bought.
+  assert.equal(isBack({}, product), true);
+  assert.equal(isBack({}, { ...product, variants: [{ id: 'v1', available: false }] }), false);
+  assert.equal(isBack({}, { ...product, active: false }), false);
 });
 
 // ---- Opt-in ----

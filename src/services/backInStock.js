@@ -19,7 +19,8 @@ function isBack(alert, product) {
     const v = product.variants.find((x) => x.id === alert.variantId);
     return !!(v && v.available);
   }
-  return product.inStock;
+  // No size chosen: back as soon as any size can be bought.
+  return (product.variants || []).some((v) => v.available);
 }
 
 async function sendAlert(alert, product, { now = new Date() } = {}) {
@@ -40,6 +41,10 @@ async function sendAlert(alert, product, { now = new Date() } = {}) {
     bodyParams: [first, title, (product && product.url) || claimed.productUrl || shopify.storeUrl()],
     kind: 'back_in_stock',
   });
+  if (outbound.shouldRetry(result, claimed.sendAttempts)) {
+    await StockAlert.updateOne({ _id: claimed._id }, { $set: { status: 'waiting', sentAt: null, note: `Will try again: ${result.error}` }, $inc: { sendAttempts: 1 } });
+    return 'retrying';
+  }
   await StockAlert.updateOne(
     { _id: claimed._id },
     { $set: { status: result.ok ? 'sent' : 'failed', note: result.ok ? null : result.error } }

@@ -25,6 +25,23 @@ services:
         sync: false
       - key: MONGODB_URI
         sync: false
+      # WhatsApp Cloud API (Meta for Developers > your app). The app secret is
+      # required: without it the webhook refuses every message.
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_API_VERSION
+        value: v25.0
+      # Your own WhatsApp number, for alerts and "send a test to me".
+      - key: FOUNDER_PHONE
+        sync: false
       - key: SHOPIFY_STORE_DOMAIN
         value: esdjn0-th.myshopify.com
       - key: SHOPIFY_CLIENT_ID

@@ -187,15 +187,25 @@ function statusStrip() {
 
 function optInCard() {
   const o = data.optInFromShopify;
+  const p = data.orderPermission || { mode: 'individual' };
+  const orders = p.mode === 'checkout'
+    ? `<p class="card-note"><span class="pill pill-green">Everyone who orders</span> You confirmed on ${escapeHtml(new Date(p.confirmedAt).toLocaleDateString())}${p.confirmedBy ? ` (${escapeHtml(p.confirmedBy)})` : ''} that your checkout shows: <i>“${escapeHtml(p.wording)}”</i></p>
+       <button type="button" class="link-btn" data-order-perm="off">My checkout doesn't say this any more</button>`
+    : `<p class="card-note"><span class="pill pill-amber">Only customers who agreed</span> Right now order updates go only to the <b>${plural(p.customersWithPermission || 0, 'customer')}</b> who agreed on WhatsApp, ticked WhatsApp at checkout or opted in to offers. Everyone else gets no order updates.</p>
+       <details class="perm-form"><summary>My checkout tells every customer they'll get order updates on WhatsApp</summary>
+         <label class="field"><span>Paste the exact words your checkout shows (they must mention WhatsApp)</span>
+           <textarea data-order-wording rows="2" placeholder="e.g. I agree to receive order updates from Thakar Kitchen on WhatsApp"></textarea></label>
+         <label class="check-line"><input type="checkbox" data-order-confirm /> Every customer sees these words before they place an order</label>
+         <button type="button" class="btn btn-small btn-dark" data-order-perm="checkout">Confirm</button>
+       </details>`;
   return `
     <article class="auto-card optin-card">
-      <div class="auto-head"><span class="auto-icon">${ico('users')}</span><h2>Who gets offers</h2></div>
-      <p class="auto-desc">WhatsApp only allows offers, reminders and campaigns to people who agreed to get them. Right now <b>${plural(o.optedIn, 'customer')}</b> ${o.optedIn === 1 ? 'has' : 'have'} opted in.</p>
-      <label class="auto-toggle">
-        <span>Count customers who accepted marketing at checkout <small>${plural(o.subscribed, 'customer')} in Shopify</small></span>
-        ${switchHtml('optin-shopify', o.enabled, 'Count customers who accepted marketing at checkout')}
-      </label>
-      <p class="card-note">Only turn this on if your checkout asks customers to get offers on WhatsApp or SMS. Customers can always reply <b>STOP</b> to stop offers, or <b>START</b> to get them again. You can also opt people in one by one on their profile, or a whole group on the Customers page.</p>
+      <div class="auto-head"><span class="auto-icon">${ico('users')}</span><h2>Who may get WhatsApp messages</h2></div>
+      <p class="auto-desc">WhatsApp only lets a business message people who agreed to hear from it on WhatsApp.</p>
+      <h3 class="perm-h">Order updates (confirmed, COD, shipped, delivered)</h3>
+      ${orders}
+      <h3 class="perm-h">Offers, reminders and campaigns</h3>
+      <p class="card-note"><b>${plural(o.optedIn, 'customer')}</b> ${o.optedIn === 1 ? 'has' : 'have'} opted in, each with a record of how they agreed (on their profile). Customers who agreed to WhatsApp marketing in Shopify are added automatically; SMS consent isn't used. Customers reply <b>STOP</b> to stop offers, <b>STOP ALL</b> to stop every message${p.stopAll ? ` (${p.stopAll} have)` : ''}, or <b>START</b> to get them again.</p>
     </article>`;
 }
 
@@ -256,21 +266,20 @@ function render() {
       }
     });
   }
-  const optin = view.querySelector('#optin-shopify');
-  optin.addEventListener('change', async () => {
-    if (optin.checked && !confirm('Count everyone who accepted marketing at checkout as opted in to WhatsApp offers?\n\nOnly do this if your checkout asks customers to get offers on WhatsApp or SMS.')) {
-      optin.checked = false;
-      return;
-    }
-    try {
-      const r = await put('/api/automations/optin-shopify', { enabled: optin.checked });
-      toast(`${plural(r.changed, 'customer')} ${optin.checked ? 'opted in' : 'opted out'}`);
-      load();
-    } catch (err) {
-      optin.checked = !optin.checked;
-      toast(err.message);
-    }
-  });
+  for (const b of view.querySelectorAll('[data-order-perm]')) {
+    b.addEventListener('click', async () => {
+      const mode = b.dataset.orderPerm;
+      if (mode === 'checkout' && !view.querySelector('[data-order-confirm]').checked) return toast('Tick the box to confirm every customer sees these words');
+      if (mode === 'off' && !confirm('Stop sending order updates to customers who haven\'t agreed individually?')) return;
+      try {
+        await put('/api/automations/order-permission', { mode, wording: mode === 'checkout' ? view.querySelector('[data-order-wording]').value : '', confirm: true });
+        toast(mode === 'checkout' ? 'Saved. Order updates go to everyone who orders.' : 'Saved. Order updates go only to customers who agreed.');
+        load();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  }
   const liveBtn = view.querySelector('[data-live]');
   if (liveBtn) {
     liveBtn.addEventListener('click', async () => {

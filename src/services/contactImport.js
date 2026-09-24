@@ -6,6 +6,7 @@ const Customer = require('../models/Customer');
 const { normalizePhone } = require('../utils/phone');
 const { cleanTags } = require('./tags');
 const { queueChange } = require('./shopifyLive');
+const consent = require('./consent');
 
 const MAX_ROWS = 50000;
 
@@ -116,13 +117,13 @@ function readList(text) {
 }
 
 // Preview (dryRun) or apply an import.
-async function importList({ csv, optIn = false, tag = '', dryRun = true }) {
+async function importList({ csv, optIn = false, tag = '', dryRun = true, evidence = '', by = '' }) {
   const list = readList(csv);
   if (list.error) return list;
   const phones = list.people.map((p) => p.phone);
   const existing = new Map();
   for (let i = 0; i < phones.length; i += 5000) {
-    const found = await Customer.find({ phone: { $in: phones.slice(i, i + 5000) } }).select('phone name optedInMarketing optedOutAt tags shopifyCustomerId shopifyPush').lean();
+    const found = await Customer.find({ phone: { $in: phones.slice(i, i + 5000) } }).select('phone name optedInMarketing optedOutAt noWhatsApp tags shopifyCustomerId shopifyPush').lean();
     for (const c of found) existing.set(c.phone, c);
   }
   const summary = {
@@ -145,7 +146,7 @@ async function importList({ csv, optIn = false, tag = '', dryRun = true }) {
     if (!c) summary.newCustomers++;
     let optInThis = false;
     if (optIn) {
-      if (c && c.optedOutAt) summary.stopped++;
+      if (c && (c.optedOutAt || c.noWhatsApp)) summary.stopped++;
       else if (c && c.optedInMarketing) summary.alreadyOptedIn++;
       else if (p.agreed === false) summary.notAgreed++;
       else {
@@ -155,7 +156,10 @@ async function importList({ csv, optIn = false, tag = '', dryRun = true }) {
     }
     const $set = {};
     if (p.name && (!c || !c.name || c.name === p.phone)) $set.name = p.name;
-    if (optInThis) Object.assign($set, { optedInMarketing: true, optInSource: 'import', optedInAt: now });
+    if (optInThis) {
+      const column = list.columns.optIn ? ` (column "${list.columns.optIn}" said yes)` : '';
+      Object.assign($set, consent.optInFields({ source: 'import', evidence: `${evidence}${column}`, by, at: now }));
+    }
     // A new tag on a Shopify customer goes to Shopify too.
     const newTags = c ? tags.filter((t) => !(c.tags || []).some((x) => x.toLowerCase() === t.toLowerCase())) : [];
     if (c && c.shopifyCustomerId && newTags.length) $set.shopifyPush = queueChange(c.shopifyPush, { added: newTags });

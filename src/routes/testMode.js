@@ -120,10 +120,12 @@ function readCustomer(body) {
 
 async function ensureCustomer({ phone, name }, optIn) {
   await Customer.updateOne({ phone }, { $setOnInsert: { phone, name } }, { upsert: true });
+  // Only made-up test customers are opted in; a real Shopify customer's
+  // permission is never changed by a test.
   if (optIn) {
     await Customer.updateOne(
-      { phone, optedInMarketing: { $ne: true } },
-      { $set: { optedInMarketing: true, optInSource: 'manual', optedInAt: new Date(), optedOutAt: null } }
+      { phone, optedInMarketing: { $ne: true }, shopifyCustomerId: null },
+      { $set: require('../services/consent').optInFields({ source: 'manual', evidence: 'Made-up customer on the Test page' }) }
     );
   }
 }
@@ -156,6 +158,7 @@ router.get('/orders', asyncHandler(async (req, res) => {
 router.post('/order', asyncHandler(async (req, res) => {
   const who = readCustomer(req.body);
   await ensureCustomer(who, false);
+
   const isCod = req.body.cod === true;
   const total = Math.max(1, Math.min(100000, Math.round(Number(req.body.total) || 640)));
   const since = new Date();
@@ -168,6 +171,9 @@ router.post('/order', asyncHandler(async (req, res) => {
     customerName: who.name,
     placedAt: since,
     simulated: true,
+    // "Agreed to WhatsApp order updates" on the Test page (kept on the test
+    // order only, so a real customer's record never changes).
+    testAgreed: req.body.agreed !== false,
     total,
     outstanding: isCod ? Math.max(0, total - 99) : 0,
     currency: 'INR',

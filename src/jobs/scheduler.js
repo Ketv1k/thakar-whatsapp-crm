@@ -23,6 +23,7 @@ const JOBS = {
   customers: () => require('../services/customerSync').syncCustomers(),
   insights: () => require('../services/customerInsights').run(),
   reminders: () => require('../services/pushNotify').remindersDue(),
+  unfinished: () => require('../routes/webhook').recoverUnfinished(),
   shopifyPush: () => require('../services/shopifyLive').pushPending(),
   shopifyHooks: () => require('../services/shopifyLive').ensureWebhooks(),
   campaigns: () => require('../services/campaigns').runDue(),
@@ -63,6 +64,7 @@ function startScheduler() {
   schedule('40 */6 * * *', 'customers');
   schedule('25 * * * *', 'insights');
   schedule('*/5 * * * *', 'reminders');
+  schedule('1,6,11,16,21,26,31,36,41,46,51,56 * * * *', 'unfinished');
   schedule('3,8,13,18,23,28,33,38,43,48,53,58 * * * *', 'shopifyPush');
   schedule('50 4 * * *', 'shopifyHooks');
   // Catch up shortly after start-up (e.g. after the server slept).

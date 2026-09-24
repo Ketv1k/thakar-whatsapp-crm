@@ -12,9 +12,19 @@ const customerSchema = new mongoose.Schema(
     // founder, by the customer replying START, by bulk opt-in, or from
     // Shopify's marketing consent when that option is on. STOP clears it.
     optedInMarketing: { type: Boolean, default: false, index: true },
-    optInSource: { type: String, default: null }, // 'manual' | 'keyword' | 'bulk' | 'shopify' | 'import' | 'checkout'
+    optInSource: { type: String, default: null }, // 'manual' | 'keyword' | 'bulk' | 'shopify_whatsapp' | 'import' | 'checkout'
     optedInAt: { type: Date, default: null },
     optedOutAt: { type: Date, default: null },
+    // Proof of how they agreed, and who recorded it (services/consent.js).
+    optInEvidence: { type: String, default: '' },
+    optInBy: { type: String, default: '' },
+    // Agreed to order updates on WhatsApp (e.g. ticked WhatsApp at checkout)
+    // without agreeing to offers.
+    orderUpdatesOptIn: { type: Boolean, default: false },
+    orderUpdatesEvidence: { type: String, default: '' },
+    // Replied STOP ALL: no WhatsApp messages at all, order updates included.
+    noWhatsApp: { type: Boolean, default: false },
+    noWhatsAppAt: { type: Date, default: null },
     // Last marketing message sent, so campaigns don't pile up on one person.
     lastMarketingAt: { type: Date, default: null },
     // From the Shopify sync (services/customerSync.js).

@@ -91,8 +91,16 @@ async function sendTemplate({ to, template, bodyParams = [], headerImageUrl = ''
     const error = whatsapp.describeError(err);
     console.error(`[outbound] template ${template.name} to …${String(to).slice(-4)} failed: ${error}`);
     const message = await Message.create({ ...record, status: 'failed', statusAt: new Date(), statusError: error });
-    return { ok: false, message, error, conversation: convo };
+    return { ok: false, message, error, conversation: convo, retryable: whatsapp.isRetryable(err) };
   }
 }
 
-module.exports = { sendText, sendTemplate, conversationFor };
+// How many times an automatic message is tried before giving up.
+const MAX_ATTEMPTS = 3;
+
+// After a failed send: try again on a later run? (Temporary problems only.)
+function shouldRetry(result, attemptsSoFar) {
+  return !result.ok && !!result.retryable && (attemptsSoFar || 0) + 1 < MAX_ATTEMPTS;
+}
+
+module.exports = { sendText, sendTemplate, conversationFor, shouldRetry, MAX_ATTEMPTS };

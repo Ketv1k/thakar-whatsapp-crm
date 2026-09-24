@@ -9,11 +9,11 @@ const Group = require('../models/Group');
 const AbandonedCheckout = require('../models/AbandonedCheckout');
 const shopify = require('../services/shopify');
 const customerStatus = require('../services/customerStatus');
-const customerSync = require('../services/customerSync');
 const customerInsights = require('../services/customerInsights');
 const customerTimeline = require('../services/customerTimeline');
 const contactImport = require('../services/contactImport');
 const shopifyLive = require('../services/shopifyLive');
+const consent = require('../services/consent');
 const segments = require('../services/segments');
 const settings = require('../services/settings');
 const { cleanTags } = require('../services/tags');
@@ -204,7 +204,8 @@ router.post('/import', ownerOnly, asyncHandler(async (req, res) => {
   const dryRun = req.body.dryRun !== false;
   const optIn = req.body.optIn === true;
   if (!dryRun && optIn && req.body.confirm !== true) return res.status(400).json({ error: 'Please confirm they agreed first' });
-  const out = await contactImport.importList({ csv, optIn, tag: String(req.body.tag || ''), dryRun });
+  const evidence = !dryRun && optIn ? consent.bulkEvidence(req.body.reason, `imported from ${String(req.body.fileName || 'a list').slice(0, 60)}`, req.user && req.user.name) : '';
+  const out = await contactImport.importList({ csv, optIn, tag: String(req.body.tag || ''), dryRun, evidence, by: req.user && req.user.name });
   if (out.error) return res.status(400).json(out);
   res.json(out);
 }));
@@ -222,10 +223,10 @@ async function checkoutConsentPhones() {
 }
 
 router.get('/grow', asyncHandler(async (req, res) => {
-  const [optedIn, shopifyConsent, shopifySetting, checkoutPhones, link] = await Promise.all([
+  const [optedIn, shopifyWhatsApp, orderBasis, checkoutPhones, link] = await Promise.all([
     Customer.countDocuments({ optedInMarketing: true }),
-    Customer.countDocuments({ marketingConsent: 'SUBSCRIBED', optedInMarketing: { $ne: true }, optedOutAt: null }),
-    customerSync.optInFromShopifyEnabled(),
+    Customer.countDocuments({ optInSource: 'shopify_whatsapp', optedInMarketing: true }),
+    consent.orderBasis(),
     checkoutConsentPhones(),
     settings.get('optin:link', {}),
   ]);
@@ -233,8 +234,8 @@ router.get('/grow', asyncHandler(async (req, res) => {
   const url = number ? `https://wa.me/${number}?text=${encodeURIComponent(OPT_IN_TEXT)}` : null;
   res.json({
     optedIn,
-    shopifyConsent,
-    shopifyConsentOn: shopifySetting,
+    shopifyWhatsApp,
+    orderUpdates: orderBasis.mode,
     checkoutConsent: checkoutPhones.length,
     link: { number: number || '', url, qr: url ? await QRCode.toString(url, { type: 'svg', margin: 1 }) : null },
   });
@@ -253,10 +254,12 @@ router.post('/grow/checkout', ownerOnly, asyncHandler(async (req, res) => {
   if (req.body.confirm !== true) return res.status(400).json({ error: 'Please confirm first' });
   const phones = await checkoutConsentPhones();
   const now = new Date();
+  const evidence = consent.bulkEvidence(req.body.reason || 'Ticked the WhatsApp box at Magic Checkout', 'added from checkouts', req.user && req.user.name);
+  const fields = consent.optInFields({ source: 'checkout', evidence, by: req.user && req.user.name, at: now });
   const ops = phones.map((phone) => ({
     updateOne: {
-      filter: { phone, optedOutAt: null, optedInMarketing: { $ne: true } },
-      update: { $set: { optedInMarketing: true, optInSource: 'checkout', optedInAt: now } },
+      filter: { phone, optedOutAt: null, optedInMarketing: { $ne: true }, noWhatsApp: { $ne: true } },
+      update: { $set: fields },
     },
   }));
   let changed = 0;
@@ -266,7 +269,7 @@ router.post('/grow/checkout', ownerOnly, asyncHandler(async (req, res) => {
   const missing = phones.filter((p) => !known.has(p));
   if (missing.length) {
     await Customer.insertMany(
-      missing.map((phone) => ({ phone, optedInMarketing: true, optInSource: 'checkout', optedInAt: now })),
+      missing.map((phone) => ({ phone, ...fields })),
       { ordered: false }
     ).catch(() => {});
     changed += missing.length;
@@ -278,10 +281,11 @@ router.post('/grow/checkout', ownerOnly, asyncHandler(async (req, res) => {
 // somewhere else (e.g. in Zoko or at checkout). Needs an explicit confirm.
 router.post('/bulk-opt-in', ownerOnly, asyncHandler(async (req, res) => {
   if (req.body.confirm !== true) return res.status(400).json({ error: 'Please confirm first' });
+  const evidence = consent.bulkEvidence(req.body.reason, 'group opt-in', req.user && req.user.name);
   const { segment, filters, tag } = await audienceOf(req.body);
   const result = await Customer.updateMany(
-    { $and: [segments.customerFilter({ segment, tag, filters }), { optedInMarketing: { $ne: true } }, { optedOutAt: null }] },
-    { $set: { optedInMarketing: true, optInSource: 'bulk', optedInAt: new Date() } }
+    { $and: [segments.customerFilter({ segment, tag, filters }), { optedInMarketing: { $ne: true } }, { optedOutAt: null }, { noWhatsApp: { $ne: true } }] },
+    { $set: consent.optInFields({ source: 'bulk', evidence, by: req.user && req.user.name }) }
   );
   res.json({ changed: result.modifiedCount });
 }));
@@ -355,6 +359,9 @@ router.get('/:phone', asyncHandler(async (req, res) => {
     optInSource: customer.optInSource || null,
     optedInAt: customer.optedInAt || null,
     optedOutAt: customer.optedOutAt || null,
+    optInEvidence: customer.optInEvidence || '',
+    noWhatsApp: !!customer.noWhatsApp,
+    orderUpdates: consent.orderUpdatesAllowed(customer, await consent.orderBasis()),
     city: customer.city || '',
     state: customer.state || '',
     pincode: customer.pincode || '',
@@ -414,7 +421,9 @@ router.patch('/:phone', asyncHandler(async (req, res) => {
   if (typeof req.body.optedInMarketing === 'boolean') {
     update.optedInMarketing = req.body.optedInMarketing;
     if (req.body.optedInMarketing) {
-      Object.assign(update, { optInSource: 'manual', optedInAt: new Date(), optedOutAt: null });
+      const how = String(req.body.evidence || '').trim();
+      if (how.length < 3) return res.status(400).json({ error: 'Say how they agreed to get offers on WhatsApp' });
+      Object.assign(update, consent.optInFields({ source: 'manual', evidence: `${how.slice(0, 200)} — recorded by ${req.user ? req.user.name : 'the team'} on ${consent.stamp()}`, by: req.user && req.user.name }));
     } else {
       // Turned off by hand: treat as an opt-out, so a later sync of Shopify
       // consent doesn't switch it back on.
@@ -468,6 +477,7 @@ router.patch('/:phone', asyncHandler(async (req, res) => {
     shopify: shopifySaved,
     optedInMarketing: !!customer.optedInMarketing,
     optInSource: customer.optInSource || null,
+    optInEvidence: customer.optInEvidence || '',
     followUpAt: customer.followUpAt || null,
     followUpNote: customer.followUpNote || '',
     birthday: customer.birthday || '',

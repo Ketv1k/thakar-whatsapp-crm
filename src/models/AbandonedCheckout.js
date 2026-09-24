@@ -27,6 +27,7 @@ const abandonedCheckoutSchema = new mongoose.Schema(
     remindedAt: { type: Date, default: null, index: true },
     // 'sent' | 'skipped' | 'failed'
     remindStatus: { type: String, default: null },
+    sendAttempts: { type: Number, default: 0 },
     skipReason: { type: String, default: null },
     recoveredAt: { type: Date, default: null },
     recoveredOrderName: { type: String, default: null },

@@ -126,6 +126,11 @@ router.get('/', asyncHandler(async (req, res) => {
     jobs: Object.fromEntries(jobNames.map((j, i) => [j, { ...jobs[i], running: isRunning(j) }])),
     shopifyConnected: shopify.isConfigured(),
     shopifyLive: await require('../services/shopifyLive').status(),
+    orderPermission: {
+      ...(await require('../services/consent').orderBasis()),
+      customersWithPermission: await Customer.countDocuments({ $or: [{ optedInMarketing: true }, { orderUpdatesOptIn: true }], noWhatsApp: { $ne: true } }),
+      stopAll: await Customer.countDocuments({ noWhatsApp: true }),
+    },
     whatsappConnected: !!process.env.WHATSAPP_TOKEN && process.env.TEST_MODE !== 'true',
     testMode: process.env.TEST_MODE === 'true',
     metaReady: templates.metaReady(),
@@ -155,6 +160,14 @@ router.post('/shopify-live', asyncHandler(async (req, res) => {
     return res.status(502).json({ error: `Shopify said: ${err.message}` });
   }
   res.json(await live.status());
+}));
+
+// The owner confirms that the checkout tells customers they'll get order
+// updates on WhatsApp (with the exact wording), or withdraws it.
+router.put('/order-permission', asyncHandler(async (req, res) => {
+  const consent = require('../services/consent');
+  if (req.body.mode === 'checkout' && req.body.confirm !== true) return res.status(400).json({ error: 'Please confirm first' });
+  res.json(await consent.setOrderBasis({ mode: req.body.mode, wording: req.body.wording, by: req.user && req.user.name }));
 }));
 
 router.put('/optin-shopify', asyncHandler(async (req, res) => {

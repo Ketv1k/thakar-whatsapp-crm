@@ -76,16 +76,18 @@ async function processIncomingMessage(waMessage, value) {
   // Idempotency: Meta retries deliveries, so bail out if we've already logged
   // this WhatsApp message id - otherwise we'd double-reply and open duplicate
   // tickets. The unique index on waMessageId is the race-proof backstop below.
+  // (A message saved but not fully handled - e.g. the server restarted
+  // halfway - is finished by recoverUnfinished(), not by a retry.)
   if (await Message.exists({ waMessageId: waMessage.id })) {
     return;
   }
 
   const contactName = value?.contacts?.[0]?.profile?.name || '';
   const content = describeInbound(waMessage);
-  const text = content.body;
+  const payload = waMessage.button?.payload || waMessage.interactive?.button_reply?.id || '';
 
   // 1. Find or create the customer + conversation
-  const customer = await Customer.findOneAndUpdate(
+  await Customer.findOneAndUpdate(
     { phone: fromPhone },
     { $setOnInsert: { phone: fromPhone, name: contactName } },
     { upsert: true, new: true }
@@ -96,9 +98,9 @@ async function processIncomingMessage(waMessage, value) {
     conversation = await Conversation.create({ customerPhone: fromPhone });
   }
 
-  // 2. Save the inbound message. If a concurrent retry beat us to it, the
-  //    unique waMessageId index throws a duplicate-key error - treat that as
-  //    "already handled" and stop, before any reply or ticket is created.
+  // 2. Save the inbound message, marked as still being handled. If a
+  //    concurrent retry beat us to it, the unique waMessageId index throws a
+  //    duplicate-key error - treat that as "already handled" and stop.
   let inboundMessage;
   try {
     inboundMessage = await Message.create({
@@ -106,16 +108,24 @@ async function processIncomingMessage(waMessage, value) {
       ticketId: conversation.activeTicketId || null,
       direction: 'inbound',
       type: content.type,
-      body: text,
+      body: content.body,
       media: content.media,
       waMessageId: waMessage.id,
+      pending: { caption: content.caption || '', preview: content.preview || '', payload, attempts: 1 },
     });
   } catch (err) {
     if (err && err.code === 11000) return;
     throw err;
   }
 
-  conversation.lastMessageAt = new Date();
+  await handleSavedMessage({ inboundMessage, conversation, fromPhone, content, payload });
+  await Message.updateOne({ _id: inboundMessage._id }, { $unset: { pending: 1 } });
+}
+
+// Everything after the message is saved: triage, replies, tickets.
+async function handleSavedMessage({ inboundMessage, conversation, fromPhone, content, payload }) {
+  const text = content.body;
+  conversation.lastMessageAt = inboundMessage.createdAt || new Date();
   conversation.lastInboundAt = conversation.lastMessageAt;
   conversation.lastMessagePreview = content.preview;
   conversation.unread = true;
@@ -127,10 +137,9 @@ async function processIncomingMessage(waMessage, value) {
   // confirmation. Confirming needs nothing from the founder; a cancel request
   // does (cancel it in Shopify), so it stays marked as needing a reply.
   if (content.type === 'button' || content.type === 'interactive') {
-    const payload = waMessage.button?.payload || waMessage.interactive?.button_reply?.id || '';
     const codAnswer = await cod.handleButton({ payload, fromPhone, conversation });
     if (codAnswer) {
-      conversation.unread = codAnswer.status === 'cancel_requested';
+      conversation.unread = codAnswer.status === 'cancel_requested' || !!codAnswer.changedMind;
       await conversation.save();
       return;
     }
@@ -139,7 +148,7 @@ async function processIncomingMessage(waMessage, value) {
   // STOP / START (or the "Stop promotions" button on an offer).
   const keyword = ['text', 'button', 'interactive'].includes(content.type) ? optIn.detectKeyword(text) : null;
   if (keyword) {
-    await optIn.applyKeyword(keyword, { fromPhone, conversation });
+    await optIn.applyKeyword(keyword, { fromPhone, conversation, text });
     conversation.unread = false;
     await conversation.save();
     return;
@@ -205,6 +214,46 @@ async function processIncomingMessage(waMessage, value) {
   const category = autoAck.categorize('text', text);
   if (await answerWithAi({ conversation, fromPhone, text, category, inboundMessage })) return;
   await sendAutoAckIfDue(conversation, fromPhone, category);
+}
+
+// Every few minutes: customer messages that were saved but never fully
+// handled (the server restarted, WhatsApp or Shopify errored). Meta already
+// got its "OK", so it won't send them again - finish them here. If a reply or
+// ticket already went out after the message, it's just marked done.
+async function recoverUnfinished(now = new Date()) {
+  const stuck = await Message.find({
+    direction: 'inbound',
+    pending: { $exists: true },
+    createdAt: { $lt: new Date(now.getTime() - 2 * 60 * 1000), $gt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+  })
+    .sort({ createdAt: 1 })
+    .limit(50);
+  const tally = { finished: 0, alreadyAnswered: 0, gaveUp: 0 };
+  for (const m of stuck) {
+    const done = () => Message.updateOne({ _id: m._id }, { $unset: { pending: 1 } });
+    if ((m.pending.attempts || 1) >= 3) {
+      await done();
+      tally.gaveUp++;
+      continue;
+    }
+    const answered = await Message.exists({ conversationId: m.conversationId, direction: 'outbound', createdAt: { $gt: m.createdAt } });
+    const conversation = await Conversation.findById(m.conversationId);
+    if (answered || !conversation) {
+      await done();
+      tally.alreadyAnswered++;
+      continue;
+    }
+    await Message.updateOne({ _id: m._id }, { $inc: { 'pending.attempts': 1 } });
+    try {
+      const content = { type: m.type, body: m.body, caption: m.pending.caption, preview: m.pending.preview, media: m.media };
+      await handleSavedMessage({ inboundMessage: m, conversation, fromPhone: conversation.customerPhone, content, payload: m.pending.payload });
+      await done();
+      tally.finished++;
+    } catch (err) {
+      console.error('[webhook] finishing a message failed again', err.message);
+    }
+  }
+  return tally;
 }
 
 // Greetings, compliments and bulk requests keep their fixed replies; these
@@ -294,3 +343,4 @@ async function createTicketForConversation({ conversation, fromPhone, issueType 
 
 module.exports = router;
 module.exports.handleIncomingMessage = handleIncomingMessage;
+module.exports.recoverUnfinished = recoverUnfinished;

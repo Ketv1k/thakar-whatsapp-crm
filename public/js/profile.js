@@ -30,6 +30,7 @@ const OPTIN_SOURCES = {
   shopify: 'agreed at checkout (Shopify)',
   import: 'from a list you imported',
   checkout: 'ticked WhatsApp at checkout',
+  shopify_whatsapp: 'agreed to WhatsApp marketing in Shopify',
 };
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -101,11 +102,18 @@ export function renderProfile(container, p, opts = {}) {
       return `<div class="box-row"><span>#${t.ticketNumber} · ${escapeHtml(ISSUE_LABELS[t.issueType] || t.issueType)}</span><span class="pill ${cls}">${label}</span></div>`;
     })
     .join('');
-  const optinNote = p.optedInMarketing
-    ? `Yes: ${escapeHtml(OPTIN_SOURCES[p.optInSource] || 'opted in')}`
+  const optinNote = p.noWhatsApp
+    ? 'No: they replied STOP ALL, so they get no WhatsApp messages at all.'
+    : p.optedInMarketing
+    ? `Yes: ${escapeHtml(OPTIN_SOURCES[p.optInSource] || 'opted in')}${p.optInEvidence ? `<span class="optin-proof">Proof: ${escapeHtml(p.optInEvidence)}</span>` : ''}`
     : p.optedOutAt
     ? `No: stopped ${escapeHtml(ago(p.optedOutAt))} ago`
     : 'Not yet. Only opted-in customers get offers and campaigns.';
+  const orderNote = p.orderUpdates
+    ? p.orderUpdates.allowed
+      ? `Order updates on WhatsApp: yes (${escapeHtml(p.orderUpdates.basis === 'checkout' ? 'your checkout asks for it' : p.orderUpdates.basis)})`
+      : `Order updates on WhatsApp: no — ${escapeHtml(p.orderUpdates.reason)}`
+    : '';
 
   container.innerHTML = `
     <div class="cust-top">
@@ -161,7 +169,7 @@ export function renderProfile(container, p, opts = {}) {
       <div data-birthday></div>
     </section>
     <label class="optin">
-      <span>Gets offers on WhatsApp<small data-optin-note>${optinNote}</small></span>
+      <span>Gets offers on WhatsApp<small data-optin-note>${optinNote}</small>${orderNote ? `<small>${orderNote}</small>` : ''}</span>
       ${switchHtml(`optin-${p.phone}-${Math.random().toString(36).slice(2, 7)}`, p.optedInMarketing, 'Gets offers on WhatsApp')}
     </label>`;
 
@@ -211,12 +219,20 @@ export function renderProfile(container, p, opts = {}) {
   // (Scoped to this container: the same customer can be open in the inbox
   // panel and on the Customers page at once.)
   q('.optin input[type="checkbox"]').addEventListener('change', async (e) => {
+    let evidence = '';
+    if (e.target.checked) {
+      evidence = prompt('How did they agree to get offers from Thakar Kitchen on WhatsApp?\n(e.g. "Asked on WhatsApp chat, said yes", "Said yes on a phone call")') || '';
+      if (evidence.trim().length < 3) {
+        e.target.checked = false;
+        return toast("Not turned on: WhatsApp needs a record of how they agreed");
+      }
+    }
     try {
-      const res = await patch(`/api/customers/${p.phone}`, { optedInMarketing: e.target.checked });
+      const res = await patch(`/api/customers/${p.phone}`, { optedInMarketing: e.target.checked, evidence });
       p.optedInMarketing = res.optedInMarketing;
       p.optInSource = res.optInSource;
       const noteEl = q('[data-optin-note]');
-      if (noteEl) noteEl.textContent = res.optedInMarketing ? 'Yes: turned on by you' : 'No: turned off by you';
+      if (noteEl) noteEl.textContent = res.optedInMarketing ? `Yes: turned on by you. Proof: ${res.optInEvidence}` : 'No: turned off by you';
     } catch (err) {
       e.target.checked = !e.target.checked;
       toast(`Not updated: ${err.message}`);

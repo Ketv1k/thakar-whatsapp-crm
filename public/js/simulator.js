@@ -162,10 +162,12 @@ async function renderOrders() {
 async function placeOrder() {
   const w = who();
   await busy(async () => {
-    const r = await post('/api/test/order', { ...w, cod: el('test-cod').checked, total: el('test-total').value });
+    const r = await post('/api/test/order', { ...w, cod: el('test-cod').checked, total: el('test-total').value, agreed: el('test-agreed').checked });
     const sent = Object.entries(r.results).filter(([, v]) => v === 'sent').map(([k]) => k);
     const text = r.off
       ? OFF_NOTE(el('test-cod').checked ? 'COD confirmation or Order updates' : 'Order updates')
+      : !el('test-agreed').checked && !sent.length
+      ? `Test order ${escapeHtml(r.order.name)} placed. No message: this customer hasn't agreed to WhatsApp order updates, so none is sent (unless you confirm your checkout wording in Automations).`
       : sent.includes('cod_request')
       ? `Test order ${escapeHtml(r.order.name)} placed as COD. The customer was asked to confirm it. Try their answer below.`
       : `Test order ${escapeHtml(r.order.name)} placed. The customer got the order confirmation.`;
@@ -293,6 +295,7 @@ export async function showTest() {
         <div class="row-fields">
           <label class="inline">Total ₹ <input id="test-total" type="number" min="1" value="640" /></label>
           <label class="inline"><input id="test-cod" type="checkbox" /> Cash on delivery (₹99 paid online)</label>
+          <label class="inline"><input id="test-agreed" type="checkbox" checked /> They agreed to WhatsApp order updates</label>
         </div>
         <div class="test-actions"><button type="button" class="btn btn-primary" id="test-order">Place test order</button></div>
         <div id="test-orders"></div>

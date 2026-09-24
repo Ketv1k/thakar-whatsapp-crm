@@ -82,6 +82,14 @@ async function remind(order, automation, { now = new Date(), ignoreQuietHours = 
     bodyParams: [firstNameOf(claimed), productLabel(claimed), url],
     kind: 'reorder_reminder',
   });
+  const tries = (claimed.sendAttempts && claimed.sendAttempts.reorder) || 0;
+  if (outbound.shouldRetry(result, tries)) {
+    await Order.updateOne(
+      { _id: claimed._id },
+      { $set: { 'notified.reorder': null, 'notifyNotes.reorder': `Will try again: ${result.error}` }, $inc: { 'sendAttempts.reorder': 1 } }
+    );
+    return { action: 'retrying', reason: result.error };
+  }
   await Order.updateOne({ _id: claimed._id }, { $set: { 'notifyNotes.reorder': result.ok ? 'Sent' : `Failed: ${result.error}` } });
   if (result.ok) await Customer.updateOne({ phone: claimed.phone }, { $set: { lastMarketingAt: now } });
   return { action: result.ok ? 'sent' : 'failed', reason: result.error || '' };

@@ -9,6 +9,7 @@ const settings = require('./settings');
 const automations = require('./automations');
 const templates = require('./templates');
 const outbound = require('./outbound');
+const consent = require('./consent');
 const { normalizePhone } = require('../utils/phone');
 const { isQuietTime } = require('../utils/time');
 
@@ -151,6 +152,14 @@ async function syncCheckouts() {
     for (const edge of conn.edges) {
       const fields = mapCheckout(edge.node);
       await AbandonedCheckout.updateOne({ shopifyId: fields.shopifyId }, { $set: fields }, { upsert: true });
+      // Ticking WhatsApp at checkout is permission for order updates there.
+      if (fields.whatsappConsent === true && fields.phone) {
+        await Customer.updateOne(
+          { phone: fields.phone, orderUpdatesOptIn: { $ne: true }, noWhatsApp: { $ne: true } },
+          { $set: { orderUpdatesOptIn: true, orderUpdatesEvidence: `Ticked the WhatsApp box at checkout on ${consent.stamp(fields.checkoutCreatedAt || new Date())}` }, $setOnInsert: { phone: fields.phone } },
+          { upsert: true }
+        ).catch((err) => { if (err.code !== 11000) throw err; });
+      }
       fetched++;
     }
     if (!conn.pageInfo.hasNextPage) break;
@@ -201,6 +210,13 @@ async function remind(checkout, automation, { now = new Date(), ignoreQuietHours
     bodyParams: [first, itemsLabel(claimed.items), claimed.url],
     kind: 'cart_reminder',
   });
+  if (outbound.shouldRetry(result, claimed.sendAttempts)) {
+    await AbandonedCheckout.updateOne(
+      { _id: claimed._id },
+      { $set: { remindedAt: null, remindStatus: null, skipReason: `Will try again: ${result.error}` }, $inc: { sendAttempts: 1 } }
+    );
+    return { action: 'retrying', reason: result.error };
+  }
   await AbandonedCheckout.updateOne(
     { _id: claimed._id },
     { $set: { remindStatus: result.ok ? 'sent' : 'failed', skipReason: result.ok ? null : result.error } }

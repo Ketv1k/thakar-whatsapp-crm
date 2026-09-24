@@ -92,13 +92,13 @@ test('skips verification for the GET handshake (no body to sign)', () => {
   assert.equal(res.statusCode, null);
 });
 
-test('skips verification (passes through) when no secret is configured', () => {
+test('refuses every message when no secret is configured', () => {
   const req = makeReq('{"hello":"world"}', undefined);
   const res = makeRes();
   let called = false;
   verifyWhatsAppSignature(req, res, () => {
     called = true;
   });
-  assert.equal(called, true);
-  assert.equal(res.statusCode, null);
+  assert.equal(called, false);
+  assert.equal(res.statusCode, 503);
 });
