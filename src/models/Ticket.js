@@ -16,6 +16,7 @@ const ticketSchema = new mongoose.Schema(
     lastActivityAt: { type: Date, default: Date.now },
     reminderSentAt: { type: Date, default: null },
     resolvedAt: { type: Date, default: null },
+    resolvedBy: { type: String, default: null }, // team member's name
   },
   { timestamps: true }
 );

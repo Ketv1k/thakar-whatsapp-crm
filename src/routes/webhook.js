@@ -9,6 +9,7 @@ const { describeInbound } = require('../services/messageContent');
 const shopify = require('../services/shopify');
 const triage = require('../services/ticketTriage');
 const autoAck = require('../services/autoAck');
+const pushNotify = require('../services/pushNotify');
 const aiAnswer = require('../services/aiAnswer');
 const cod = require('../services/cod');
 const optIn = require('../services/optIn');
@@ -56,7 +57,16 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Handles one customer message, then tells the team if it needs someone.
 async function handleIncomingMessage(waMessage, value) {
+  const since = new Date(Date.now() - 1000);
+  await processIncomingMessage(waMessage, value);
+  if (waMessage.from) {
+    await pushNotify.afterInbound(waMessage.from, since).catch((err) => console.error('[push] after message failed', err.message));
+  }
+}
+
+async function processIncomingMessage(waMessage, value) {
   const fromPhone = waMessage.from; // digits only, e.g. "919876543210"
   if (!fromPhone || !waMessage.id) {
     console.warn('[webhook] skipping message with no sender or id');

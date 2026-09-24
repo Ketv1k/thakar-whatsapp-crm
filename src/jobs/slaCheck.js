@@ -4,14 +4,11 @@
 const cron = require('node-cron');
 const Ticket = require('../models/Ticket');
 const whatsapp = require('../services/whatsapp');
+const pushNotify = require('../services/pushNotify');
 
 async function checkOverdueTickets() {
   const slaHours = Number(process.env.SLA_HOURS || 6);
   const founderPhone = process.env.FOUNDER_PHONE;
-  if (!founderPhone) {
-    console.warn('[slaCheck] FOUNDER_PHONE not set, skipping SLA check');
-    return;
-  }
 
   const cutoff = new Date(Date.now() - slaHours * 60 * 60 * 1000);
 
@@ -25,10 +22,13 @@ async function checkOverdueTickets() {
 
   for (const ticket of overdue) {
     try {
-      await whatsapp.sendTextMessage(
-        founderPhone,
-        `Reminder: ticket #${ticket.ticketNumber} (${ticket.issueType}) has been unresolved for ${slaHours}+ hours.`
-      );
+      await pushNotify.ticketOverdue(ticket, slaHours).catch((err) => console.error('[slaCheck] notification failed', err.message));
+      if (founderPhone) {
+        await whatsapp.sendTextMessage(
+          founderPhone,
+          `Reminder: ticket #${ticket.ticketNumber} (${ticket.issueType}) has been unresolved for ${slaHours}+ hours.`
+        );
+      }
       ticket.reminderSentAt = new Date();
       await ticket.save();
     } catch (err) {

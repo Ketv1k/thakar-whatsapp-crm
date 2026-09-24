@@ -266,6 +266,7 @@ async function getCustomerSummaryByPhone(phone) {
             orders(first: 5, sortKey: CREATED_AT, reverse: true) {
               edges {
                 node {
+                  id
                   name
                   createdAt
                   displayFulfillmentStatus
@@ -285,6 +286,7 @@ async function getCustomerSummaryByPhone(phone) {
   if (!node) return { found: false };
 
   const orders = (node.orders?.edges || []).map((e) => ({
+    id: String(e.node.id || '').split('/').pop(),
     name: e.node.name,
     createdAt: e.node.createdAt,
     fulfillmentStatus: e.node.displayFulfillmentStatus,

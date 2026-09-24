@@ -22,7 +22,8 @@ const automationRoutes = require('./routes/automations');
 const templateRoutes = require('./routes/templates');
 const campaignRoutes = require('./routes/campaigns');
 const shopRoutes = require('./routes/shop');
-const { requireInboxAuth } = require('./middleware/auth');
+const teamRoutes = require('./routes/team');
+const { requireInboxAuth, ownerForChanges } = require('./middleware/auth');
 const { verifyWhatsAppSignature } = require('./middleware/verifyWhatsAppSignature');
 
 const app = express();
@@ -40,6 +41,12 @@ function captureRawBody(req, res, buf) {
 const webhookJson = express.json({ limit: '1mb', verify: captureRawBody });
 const apiJson = express.json({ limit: '1mb' });
 
+// Shopify calls this the moment orders, customers, carts or stock change.
+// Authenticity is proven by Shopify's signature (services/shopifyLive.js).
+app.post('/shopify/webhooks', express.raw({ type: '*/*', limit: '2mb' }), (req, res, next) =>
+  require('./services/shopifyLive').receive(req, res).catch(next)
+);
+
 // Meta calls this directly - no auth header; authenticity is proven by the
 // signature check (WHATSAPP_APP_SECRET) and the GET verify token instead.
 app.use('/webhook', webhookJson, verifyWhatsAppSignature, webhookRoutes);
@@ -47,12 +54,16 @@ app.use('/webhook', webhookJson, verifyWhatsAppSignature, webhookRoutes);
 // Everything the Founder Inbox PWA calls - protected by the shared INBOX_API_KEY.
 // (A customer list import carries a whole CSV file, so it gets more room.)
 app.use('/api/customers/import', requireInboxAuth, express.json({ limit: '8mb' }));
+// Logging in needs no token (and has its own limit on wrong tries).
+app.post('/api/login', apiJson, teamRoutes.login);
+app.use('/api', apiJson, requireInboxAuth, teamRoutes.router);
 app.use('/api', apiJson, requireInboxAuth, inboxRoutes);
 app.use('/api/tickets', apiJson, requireInboxAuth, ticketRoutes);
 app.use('/api/customers', apiJson, requireInboxAuth, customerRoutes);
-app.use('/api/automations', apiJson, requireInboxAuth, automationRoutes);
-app.use('/api/templates', apiJson, requireInboxAuth, templateRoutes);
-app.use('/api/campaigns', apiJson, requireInboxAuth, campaignRoutes);
+// Team members can see these; only the owner can change them.
+app.use('/api/automations', apiJson, requireInboxAuth, ownerForChanges, automationRoutes);
+app.use('/api/templates', apiJson, requireInboxAuth, ownerForChanges, templateRoutes);
+app.use('/api/campaigns', apiJson, requireInboxAuth, ownerForChanges, campaignRoutes);
 app.use('/api', apiJson, requireInboxAuth, shopRoutes);
 
 // Customer-message simulator; only exists while TEST_MODE=true.

@@ -125,6 +125,7 @@ router.get('/', asyncHandler(async (req, res) => {
     },
     jobs: Object.fromEntries(jobNames.map((j, i) => [j, { ...jobs[i], running: isRunning(j) }])),
     shopifyConnected: shopify.isConfigured(),
+    shopifyLive: await require('../services/shopifyLive').status(),
     whatsappConnected: !!process.env.WHATSAPP_TOKEN && process.env.TEST_MODE !== 'true',
     testMode: process.env.TEST_MODE === 'true',
     metaReady: templates.metaReady(),
@@ -143,6 +144,17 @@ router.post('/run', asyncHandler(async (req, res) => {
   const run = runJob(job);
   const timeout = new Promise((r) => setTimeout(() => r({ stillRunning: true }), 20000));
   res.json(await Promise.race([run, timeout]));
+}));
+
+// Asks Shopify again to send instant updates (e.g. after the address changed).
+router.post('/shopify-live', asyncHandler(async (req, res) => {
+  const live = require('../services/shopifyLive');
+  try {
+    await live.ensureWebhooks();
+  } catch (err) {
+    return res.status(502).json({ error: `Shopify said: ${err.message}` });
+  }
+  res.json(await live.status());
 }));
 
 router.put('/optin-shopify', asyncHandler(async (req, res) => {

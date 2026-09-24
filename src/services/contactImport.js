@@ -5,6 +5,7 @@
 const Customer = require('../models/Customer');
 const { normalizePhone } = require('../utils/phone');
 const { cleanTags } = require('./tags');
+const { queueChange } = require('./shopifyLive');
 
 const MAX_ROWS = 50000;
 
@@ -121,7 +122,7 @@ async function importList({ csv, optIn = false, tag = '', dryRun = true }) {
   const phones = list.people.map((p) => p.phone);
   const existing = new Map();
   for (let i = 0; i < phones.length; i += 5000) {
-    const found = await Customer.find({ phone: { $in: phones.slice(i, i + 5000) } }).select('phone name optedInMarketing optedOutAt').lean();
+    const found = await Customer.find({ phone: { $in: phones.slice(i, i + 5000) } }).select('phone name optedInMarketing optedOutAt tags shopifyCustomerId shopifyPush').lean();
     for (const c of found) existing.set(c.phone, c);
   }
   const summary = {
@@ -155,6 +156,9 @@ async function importList({ csv, optIn = false, tag = '', dryRun = true }) {
     const $set = {};
     if (p.name && (!c || !c.name || c.name === p.phone)) $set.name = p.name;
     if (optInThis) Object.assign($set, { optedInMarketing: true, optInSource: 'import', optedInAt: now });
+    // A new tag on a Shopify customer goes to Shopify too.
+    const newTags = c ? tags.filter((t) => !(c.tags || []).some((x) => x.toLowerCase() === t.toLowerCase())) : [];
+    if (c && c.shopifyCustomerId && newTags.length) $set.shopifyPush = queueChange(c.shopifyPush, { added: newTags });
     const update = { $setOnInsert: { phone: p.phone } };
     if (Object.keys($set).length) update.$set = $set;
     if (tags.length) update.$addToSet = { tags: { $each: tags } };

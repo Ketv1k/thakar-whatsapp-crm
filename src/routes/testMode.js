@@ -300,4 +300,58 @@ router.post('/restock', asyncHandler(async (req, res) => {
   res.json({ decision: { action: result, reason: result === 'waiting' ? 'Template not approved yet' : '' }, ...(await whatWasSent(who.phone, since)) });
 }));
 
+// ---------- Your reminders and alerts ----------
+// Each uses the made-up test customer the page sends, so real customers
+// aren't touched. They also pop up as notifications on devices that have
+// them on.
+
+// A "Remind me" that is due right now.
+router.post('/follow-up', asyncHandler(async (req, res) => {
+  const who = readCustomer(req.body);
+  await ensureCustomer(who, false);
+  await Customer.updateOne(
+    { phone: who.phone },
+    { $set: { followUpAt: new Date(Date.now() - 60 * 1000), followUpNote: 'Test reminder: call about the bulk order', followUpNotifiedAt: null } }
+  );
+  const out = await require('../services/pushNotify').remindersDue();
+  res.json({ phone: who.phone, notified: out.reminders });
+}));
+
+// Their birthday is today.
+router.post('/birthday', asyncHandler(async (req, res) => {
+  const who = readCustomer(req.body);
+  await ensureCustomer(who, false);
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(5, 10);
+  await Customer.updateOne({ phone: who.phone }, { $set: { birthday: today } });
+  const push = await require('../services/pushNotify').send({
+    title: `Birthday today: ${who.name || who.phone}`,
+    body: 'Send them a wish on WhatsApp.',
+    url: `/#/customers/${who.phone}`,
+  });
+  res.json({ phone: who.phone, devices: push.sent });
+}));
+
+// A ticket that has waited longer than the time you set (SLA_HOURS).
+router.post('/overdue-ticket', asyncHandler(async (req, res) => {
+  const who = readCustomer(req.body);
+  await ensureCustomer(who, false);
+  const hours = Number(process.env.SLA_HOURS || 6);
+  let conversation = await Conversation.findOne({ customerPhone: who.phone });
+  if (!conversation) conversation = await Conversation.create({ customerPhone: who.phone });
+  const waitedSince = new Date(Date.now() - (hours + 1) * 60 * 60 * 1000);
+  const ticket = await Ticket.create({
+    ticketNumber: await Ticket.nextTicketNumber(),
+    customerPhone: who.phone,
+    conversationId: conversation._id,
+    issueType: 'delay',
+    status: 'open',
+    lastActivityAt: waitedSince,
+  });
+  await Message.create({ conversationId: conversation._id, ticketId: ticket._id, direction: 'inbound', type: 'text', body: 'Where is my order? It has been a week.', createdAt: waitedSince });
+  Object.assign(conversation, { activeTicketId: ticket._id, unread: true, lastMessageAt: waitedSince, lastInboundAt: waitedSince, lastMessagePreview: 'Where is my order? It has been a week.', outboundOnly: false });
+  await conversation.save();
+  await require('../jobs/slaCheck').checkOverdueTickets();
+  res.json({ ticketNumber: ticket.ticketNumber, conversationId: conversation._id, hours });
+}));
+
 module.exports = router;

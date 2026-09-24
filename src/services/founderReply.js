@@ -13,7 +13,7 @@ class ReplyError extends Error {
   }
 }
 
-async function replyAsFounder({ conversation, body, ticket = null, extra = {}, preview = null }) {
+async function replyAsFounder({ conversation, body, ticket = null, extra = {}, preview = null, by = null }) {
   const text = String(body || '').trim();
   if (!text) throw new ReplyError(400, 'Type a reply first');
   if (text.length > 4096) throw new ReplyError(400, 'That reply is too long for WhatsApp (4,096 characters max)');
@@ -37,7 +37,7 @@ async function replyAsFounder({ conversation, body, ticket = null, extra = {}, p
     to: conversation.customerPhone,
     body: text,
     sentByFounder: true,
-    extra,
+    extra: by ? { ...extra, sentBy: { id: String(by._id), name: by.name } } : extra,
   });
 
   if (ticket) {

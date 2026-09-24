@@ -3,7 +3,7 @@
 // founder's note and the offers opt-in.
 import {
   api, post, patch, del, el, escapeHtml, formatPhone, avatar, ago, money, toast, icon, ico,
-  ISSUE_LABELS, switchHtml, shortDate, plural, STAGE_PILLS,
+  ISSUE_LABELS, switchHtml, shortDate, plural, STAGE_PILLS, isOwner,
 } from './core.js';
 
 
@@ -90,8 +90,9 @@ export function renderProfile(container, p, opts = {}) {
         cod && cod.status === 'awaiting'
           ? `<button type="button" class="link-btn" data-cod-confirm="${escapeHtml(cod._id)}">Mark confirmed</button>`
           : '';
-      return `<div class="box-row"><span><b>${escapeHtml(o.name)}</b>${o.simulated ? ' <span class="pill">test</span>' : ''}<div class="sub">${escapeHtml(shortDate(o.createdAt))} · ${money(o.total, s.currency || o.currency)}</div></span>
-        <span class="row-pills"><span class="pill ${cls}">${escapeHtml(label)}</span>${codPill}${codAction}</span></div>`;
+      const open = o.id ? `<button type="button" class="link-btn" data-order-open="${escapeHtml(o.id)}" aria-expanded="false">Details</button>` : '';
+      return `<div class="order-wrap"><div class="box-row"><span><b>${escapeHtml(o.name)}</b>${o.simulated ? ' <span class="pill">test</span>' : ''}<div class="sub">${escapeHtml(shortDate(o.createdAt))} · ${money(o.total, s.currency || o.currency)}</div></span>
+        <span class="row-pills"><span class="pill ${cls}">${escapeHtml(label)}</span>${codPill}${codAction}${open}</span></div><div class="order-detail hidden" data-order-detail="${escapeHtml(o.id || '')}"></div></div>`;
     })
     .join('');
   const tickets = (p.tickets || [])
@@ -180,6 +181,9 @@ export function renderProfile(container, p, opts = {}) {
 
   renderTags(q('[data-tags]'), p, opts);
   renderStockAlerts(q('[data-stock]'), p);
+  for (const b of container.querySelectorAll('[data-order-open]')) {
+    b.addEventListener('click', () => toggleOrder(container, b, p));
+  }
   renderFollowUp(q('[data-followup]'), p);
   renderBirthday(q('[data-birthday]'), p);
   loadHistory(q('[data-history]'), p.phone, 12);
@@ -189,7 +193,7 @@ export function renderProfile(container, p, opts = {}) {
   const saveNote = async () => {
     if (note.value === savedNote) return;
     try {
-      await patch(`/api/customers/${p.phone}`, { notes: note.value });
+      shopifyNote(await patch(`/api/customers/${p.phone}`, { notes: note.value }));
       savedNote = note.value;
       p.notes = note.value;
       const saved = q('[data-note-saved]');
@@ -218,6 +222,102 @@ export function renderProfile(container, p, opts = {}) {
       toast(`Not updated: ${err.message}`);
     }
   });
+}
+
+// After a tag or note change: say whether Shopify has it too.
+function shopifyNote(res) {
+  if (res && res.shopify === 'saved') toast('Saved here and in Shopify');
+  else if (res && res.shopify === 'failed') toast("Saved here. Shopify didn't answer; it will get it in a few minutes.");
+}
+
+// ---------- One order in full (from Shopify) ----------
+const PAYMENT = { PAID: 'Paid', PENDING: 'Payment pending', PARTIALLY_PAID: 'Partly paid', REFUNDED: 'Refunded', PARTIALLY_REFUNDED: 'Partly refunded', AUTHORIZED: 'Authorized', VOIDED: 'Voided' };
+
+async function toggleOrder(container, btn, p) {
+  const id = btn.dataset.orderOpen;
+  const box = container.querySelector(`[data-order-detail="${CSS.escape(id)}"]`);
+  const opening = box.classList.contains('hidden');
+  box.classList.toggle('hidden', !opening);
+  btn.setAttribute('aria-expanded', String(opening));
+  btn.textContent = opening ? 'Hide' : 'Details';
+  if (!opening) return;
+  box.innerHTML = '<div class="muted">Loading from Shopify…</div>';
+  try {
+    renderOrderDetail(box, await api(`/api/shop-orders/${id}`), p);
+  } catch (err) {
+    box.innerHTML = `<div class="muted">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderOrderDetail(box, o, p) {
+  const items = o.items
+    .map((i) => `<div class="od-item"><span>${escapeHtml(i.title)}${i.variant ? ` (${escapeHtml(i.variant)})` : ''} × ${i.quantity}</span><span>${money(i.price * i.quantity, o.currency)}</span></div>`)
+    .join('');
+  const due = o.outstanding > 0 && !o.cancelledAt ? ` · <b>${money(o.outstanding, o.currency)} to collect</b>` : '';
+  const tracking = o.tracking
+    .map((t) => `<div>${escapeHtml(t.company || 'Courier')}${t.number ? ` · ${escapeHtml(t.number)}` : ''}${t.url ? ` · <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">track</a>` : ''}</div>`)
+    .join('');
+  const canCancel = isOwner() && !o.cancelledAt && !['FULFILLED', 'PARTIALLY_FULFILLED'].includes(o.fulfillment);
+  box.innerHTML = `
+    ${o.cancelledAt ? `<p class="warn">Cancelled ${escapeHtml(shortDate(o.cancelledAt))}</p>` : ''}
+    <div class="od-items">${items}</div>
+    <div class="od-sum">Items ${money(o.subtotal, o.currency)} · Delivery ${money(o.shipping, o.currency)} · <b>Total ${money(o.total, o.currency)}</b></div>
+    <div class="od-line"><span>Payment</span><span>${escapeHtml(PAYMENT[o.payment] || o.payment || '—')}${o.gateways.length ? ` (${escapeHtml(o.gateways.join(', '))})` : ''}${due}</span></div>
+    ${o.address.length ? `<div class="od-line"><span>Ship to</span><span>${o.address.map(escapeHtml).join('<br>')}</span></div>` : ''}
+    ${tracking ? `<div class="od-line"><span>Tracking</span><span>${tracking}</span></div>` : ''}
+    ${o.note ? `<div class="od-line"><span>Note</span><span class="od-note">${escapeHtml(o.note)}</span></div>` : ''}
+    ${o.tags.length ? `<div class="od-line"><span>Tags</span><span>${o.tags.map((t) => `<span class="pill">${escapeHtml(t)}</span>`).join(' ')}</span></div>` : ''}
+    <div class="od-actions">
+      ${o.adminUrl ? `<a class="btn btn-small" href="${escapeHtml(o.adminUrl)}" target="_blank" rel="noopener noreferrer">${ico('external')}Open in Shopify</a>` : ''}
+      ${o.tracking.length || o.statusPageUrl ? '<button type="button" class="btn btn-small" data-od="track">Send tracking in chat</button>' : ''}
+      <button type="button" class="btn btn-small" data-od="note">Add note</button>
+      <button type="button" class="btn btn-small" data-od="tag">Add tag</button>
+      ${canCancel ? '<button type="button" class="btn btn-small danger-btn" data-od="cancel">Cancel order</button>' : ''}
+    </div>
+    <div class="od-form" data-od-form></div>`;
+  const form = box.querySelector('[data-od-form]');
+  const refresh = (fresh) => renderOrderDetail(box, fresh, p);
+  const ask = (label, placeholder, go) => {
+    form.innerHTML = `<div class="row-fields"><input class="plain-input" data-od-input placeholder="${escapeHtml(placeholder)}" maxlength="${label === 'tag' ? 40 : 500}" /><button type="button" class="btn btn-small btn-dark" data-od-save>Save to Shopify</button></div>`;
+    const input = form.querySelector('[data-od-input]');
+    input.focus();
+    const save = async () => {
+      if (!input.value.trim()) return;
+      try {
+        refresh(await go(input.value.trim()));
+        toast('Saved in Shopify');
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+    form.querySelector('[data-od-save]').addEventListener('click', save);
+    input.addEventListener('keydown', (e) => e.key === 'Enter' && save());
+  };
+  for (const b of box.querySelectorAll('[data-od]')) {
+    b.addEventListener('click', async () => {
+      const what = b.dataset.od;
+      if (what === 'note') return ask('note', 'e.g. Customer asked to deliver after 6pm', (note) => post(`/api/shop-orders/${o.id}/note`, { note }));
+      if (what === 'tag') return ask('tag', 'e.g. Gift, Priority', (tag) => post(`/api/shop-orders/${o.id}/tag`, { tag }));
+      if (what === 'track') {
+        try {
+          await post(`/api/shop-orders/${o.id}/send-tracking`, { phone: p.phone });
+          toast('Tracking link sent in the chat');
+        } catch (err) {
+          toast(err.message);
+        }
+        return;
+      }
+      if (what === 'cancel') {
+        if (!confirm(`Cancel order ${o.name} in Shopify?\n\nThe items go back into stock. No money is refunded here: if they paid online, refund them in Razorpay. This can't be undone.`)) return;
+        try {
+          refresh(await post(`/api/shop-orders/${o.id}/cancel`, { confirm: true, reason: 'CUSTOMER' }));
+          toast(`${o.name} cancelled in Shopify`);
+        } catch (err) {
+          toast(err.message);
+        }
+      }
+    });
+  }
 }
 
 // ---------- Reminder to follow up ----------
@@ -255,6 +355,7 @@ function followUpForm(box, p) {
   box.innerHTML = `
     <div class="followup-form">
       <div class="quick-dates">
+        <button type="button" class="chip-btn" data-days="0">Today</button>
         <button type="button" class="chip-btn" data-days="1">Tomorrow</button>
         <button type="button" class="chip-btn" data-days="3">In 3 days</button>
         <button type="button" class="chip-btn" data-days="7">Next week</button>
@@ -272,7 +373,9 @@ function followUpForm(box, p) {
   box.querySelector('[data-fu-save]').addEventListener('click', () => {
     if (!dateInput.value) return toast('Pick a date');
     const [y, m, d] = dateInput.value.split('-').map(Number);
-    saveFollowUp(box, p, new Date(y, m - 1, d, 10, 0, 0), box.querySelector('[data-fu-note]').value);
+    // Today: due now. Another day: 10am that day.
+    const at = dateInput.value === dateInputValue(new Date()) ? new Date() : new Date(y, m - 1, d, 10, 0, 0);
+    saveFollowUp(box, p, at, box.querySelector('[data-fu-note]').value);
   });
 }
 
@@ -378,6 +481,7 @@ function renderTags(box, p, opts) {
     try {
       const res = await patch(`/api/customers/${p.phone}`, { tags });
       p.tags = res.tags;
+      shopifyNote(res);
       renderTags(box, p, opts);
       if (opts.onTagsChanged) opts.onTagsChanged();
     } catch (err) {

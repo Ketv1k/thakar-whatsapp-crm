@@ -46,7 +46,22 @@ const customerSchema = new mongoose.Schema(
     // Founder's reminder to get back to this customer, shown on Home when due.
     followUpAt: { type: Date, default: null, index: true },
     followUpNote: { type: String, default: '' },
+    followUpNotifiedAt: { type: Date, default: null },
     birthday: { type: String, default: '' }, // 'MM-DD'
+    // Two-way sync with the Shopify customer (services/shopifyLive.js):
+    // tags and note come from Shopify; changes made here wait in
+    // shopifyPush until Shopify has them.
+    tagsPulledAt: { type: Date, default: null },
+    shopifyPush: {
+      type: new mongoose.Schema(
+        { tagsAdd: [String], tagsRemove: [String], note: { type: String, default: null }, v: Number, failedAt: Date, error: String },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+    // Last WhatsApp marketing consent written to Shopify, and when it last failed.
+    shopifyWaConsent: { type: String, default: null },
+    shopifyWaConsentTriedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

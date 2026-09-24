@@ -13,11 +13,13 @@ const customerSync = require('../services/customerSync');
 const customerInsights = require('../services/customerInsights');
 const customerTimeline = require('../services/customerTimeline');
 const contactImport = require('../services/contactImport');
+const shopifyLive = require('../services/shopifyLive');
 const segments = require('../services/segments');
 const settings = require('../services/settings');
 const { cleanTags } = require('../services/tags');
 const { normalizePhone } = require('../utils/phone');
 const { asyncHandler } = require('../utils/asyncHandler');
+const { ownerOnly } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -157,7 +159,7 @@ function csvCell(v) {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
-router.get('/export', asyncHandler(async (req, res) => {
+router.get('/export', ownerOnly, asyncHandler(async (req, res) => {
   const { segment, filters, tag } = await audienceOf(req.query);
   const q = String(req.query.q || '').slice(0, 60);
   const rows = await Customer.find(segments.customerFilter({ segment, tag, q, filters }))
@@ -196,7 +198,7 @@ router.get('/export', asyncHandler(async (req, res) => {
 }));
 
 // Preview (dryRun: true) or apply a CSV import.
-router.post('/import', asyncHandler(async (req, res) => {
+router.post('/import', ownerOnly, asyncHandler(async (req, res) => {
   const csv = String(req.body.csv || '');
   if (!csv.trim()) return res.status(400).json({ error: 'Choose a CSV file first' });
   const dryRun = req.body.dryRun !== false;
@@ -238,7 +240,7 @@ router.get('/grow', asyncHandler(async (req, res) => {
   });
 }));
 
-router.put('/grow/link', asyncHandler(async (req, res) => {
+router.put('/grow/link', ownerOnly, asyncHandler(async (req, res) => {
   const number = normalizePhone(req.body.number);
   if (!number) return res.status(400).json({ error: 'Type your WhatsApp business number, e.g. 98765 43210' });
   await settings.set('optin:link', { number });
@@ -247,7 +249,7 @@ router.put('/grow/link', asyncHandler(async (req, res) => {
 
 // Opts in people who ticked the WhatsApp box at checkout (Magic Checkout)
 // but didn't finish. Needs an explicit confirm.
-router.post('/grow/checkout', asyncHandler(async (req, res) => {
+router.post('/grow/checkout', ownerOnly, asyncHandler(async (req, res) => {
   if (req.body.confirm !== true) return res.status(400).json({ error: 'Please confirm first' });
   const phones = await checkoutConsentPhones();
   const now = new Date();
@@ -274,7 +276,7 @@ router.post('/grow/checkout', asyncHandler(async (req, res) => {
 
 // Opt a whole group in to offers at once - for customers who already agreed
 // somewhere else (e.g. in Zoko or at checkout). Needs an explicit confirm.
-router.post('/bulk-opt-in', asyncHandler(async (req, res) => {
+router.post('/bulk-opt-in', ownerOnly, asyncHandler(async (req, res) => {
   if (req.body.confirm !== true) return res.status(400).json({ error: 'Please confirm first' });
   const { segment, filters, tag } = await audienceOf(req.body);
   const result = await Customer.updateMany(
@@ -338,7 +340,7 @@ router.get('/:phone', asyncHandler(async (req, res) => {
     Conversation.findOne({ customerPhone: phone }).select('_id').lean(),
     Order.find({ phone, isCod: true }).sort({ placedAt: -1 }).limit(10).select('name cod outstanding total currency placedAt').lean(),
     StockAlert.find({ phone, status: { $in: ['waiting', 'sent', 'failed'] } }).sort({ createdAt: -1 }).limit(20).lean(),
-    Order.find({ phone }).sort({ placedAt: -1 }).limit(5).select('name placedAt total currency fulfillmentStatus shippedAt simulated').lean(),
+    Order.find({ phone }).sort({ placedAt: -1 }).limit(5).select('shopifyId name placedAt total currency fulfillmentStatus shippedAt simulated').lean(),
   ]);
 
   const avgOrder = ordersCount ? Math.round(totalSpent / ordersCount) : null;
@@ -380,6 +382,7 @@ router.get('/:phone', asyncHandler(async (req, res) => {
     // Orders the app has on file: test orders, and a fallback when Shopify
     // can't be reached.
     localOrders: localOrders.map((o) => ({
+      id: o.simulated ? null : String(o.shopifyId || '').split('/').pop(),
       name: o.name,
       createdAt: o.placedAt,
       total: o.total,
@@ -434,17 +437,35 @@ router.patch('/:phone', asyncHandler(async (req, res) => {
     update.birthday = req.body.birthday;
   }
 
+  // Tag and note changes on a Shopify customer go to Shopify too.
+  const before = await Customer.findOne({ phone }).select('tags notes shopifyCustomerId shopifyPush').lean();
+  if (before && before.shopifyCustomerId && (update.tags || update.notes !== undefined)) {
+    const had = (before.tags || []).map((t) => t.toLowerCase());
+    const now = (update.tags || before.tags || []).map((t) => t.toLowerCase());
+    const change = {
+      added: update.tags ? update.tags.filter((t) => !had.includes(t.toLowerCase())) : [],
+      removed: update.tags ? (before.tags || []).filter((t) => !now.includes(t.toLowerCase())) : [],
+    };
+    if (update.notes !== undefined && update.notes !== (before.notes || '')) change.note = update.notes;
+    if (change.added.length || change.removed.length || change.note !== undefined) {
+      update.shopifyPush = shopifyLive.queueChange(before.shopifyPush, change);
+    }
+  }
+
   const customer = await Customer.findOneAndUpdate(
     { phone },
     { $set: update, $setOnInsert: { phone } },
     { upsert: true, new: true }
   ).lean();
+  const shopifySaved = customer.shopifyPush ? await shopifyLive.pushCustomer(customer) : 'none';
 
   res.json({
     phone,
     name: customer.name || '',
     notes: customer.notes || '',
     tags: customer.tags || [],
+    // 'saved': Shopify has it · 'failed': will retry · 'none': not a Shopify customer / nothing to send
+    shopify: shopifySaved,
     optedInMarketing: !!customer.optedInMarketing,
     optInSource: customer.optInSource || null,
     followUpAt: customer.followUpAt || null,

@@ -1,5 +1,5 @@
 // Home: today at a glance and who needs the founder first.
-import { state, api, el, escapeHtml, displayName, avatar, ago, money, ico, ISSUE_LABELS, setInboxCount, isCurrent, plural, shortDate } from './core.js';
+import { state, api, el, escapeHtml, displayName, avatar, ago, money, ico, ISSUE_LABELS, setInboxCount, isCurrent, plural, shortDate, isOwner } from './core.js';
 import { setFilter } from './inbox.js';
 
 function greeting() {
@@ -146,7 +146,7 @@ export async function loadHome() {
             ${autoRows.filter(([, n]) => n > 0).map(([label, n]) => `<div class="auto-row"><span>${label}</span><b>${n}</b></div>`).join('') || '<p class="card-note">Nothing yet today.</p>'}
             <p class="card-note" style="margin-top:8px">${aiOn ? `AI answers are on (${escapeHtml(state.config.ai.model || state.config.ai.provider)}).` : 'AI answers are off. Add your AI key in Render (AI_API_KEY) to turn them on.'} <a href="#/automations">Automations</a></p>
           </section>
-          ${campaignCard(d.lastCampaign)}
+          ${isOwner() ? campaignCard(d.lastCampaign) : ''}
           ${state.config.testMode ? `
           <section class="card">
             <h2>Try it out</h2>

@@ -1,6 +1,6 @@
 // Test page (test mode only): pretend to be a customer, and try every
 // automation with pretend orders, carts and restocks. Nothing is sent.
-import { state, api, post, el, escapeHtml, ISSUE_LABELS, isCurrent } from './core.js';
+import { state, api, post, patch, el, escapeHtml, ISSUE_LABELS, isCurrent, isOwner } from './core.js';
 
 const TEST_SAMPLES = [
   ['Order status', 'Hi, where is my order?'],
@@ -31,6 +31,7 @@ function who() {
 }
 
 function repliesHtml(replies) {
+  if (replies === null) return ''; // a test of your own alerts: nothing goes to a customer
   if (!replies || !replies.length) return '<div class="would">No message to the customer</div>';
   return (
     '<div class="would">The customer would receive</div>' +
@@ -173,18 +174,86 @@ async function placeOrder() {
   });
 }
 
+// Reminder tests use a new made-up customer each time: real customers
+// aren't changed, and the "already reminded" limits never get in the way.
+function freshCustomer() {
+  const n = String(Math.floor(10000 + Math.random() * 90000));
+  return { phone: `9190000${n}`, name: `Test customer ${n.slice(-4)}` };
+}
+
+const AUTOMATION_KEYS = { cart: 'abandoned_cart', reorder: 'reorder_reminder', restock: 'back_in_stock' };
+const AUTOMATION_LABELS = { cart: 'Abandoned cart', reorder: 'Reorder reminders', restock: 'Back-in-stock alerts' };
+
 async function marketing(kind) {
-  const w = who();
+  const w = freshCustomer();
   const optIn = el('test-optin').checked;
-  const labels = { cart: 'Abandoned cart', reorder: 'Reorder reminders', restock: 'Back-in-stock alerts' };
   await busy(async () => {
     const r = await post(`/api/test/${kind}`, { ...w, optIn, product: el('test-product').value });
     const sentText = {
-      cart: 'Cart reminder sent, with the link that reopens their order in Magic Checkout.',
-      reorder: 'Reorder reminder sent for their order from 3 weeks ago.',
-      restock: 'Back-in-stock message sent.',
+      cart: `Cart reminder sent to ${escapeHtml(w.name)}, with the link that reopens their order in Magic Checkout.`,
+      reorder: `Reorder reminder sent to ${escapeHtml(w.name)} for their order from 3 weeks ago.`,
+      restock: `Back-in-stock message sent to ${escapeHtml(w.name)}.`,
     }[kind];
-    showResult(decisionText(r.decision, sentText) || OFF_NOTE(labels[kind]), r);
+    if (r.decision && r.decision.reason === 'Automation is off') {
+      showResult(
+        `Nothing was sent: <b>${AUTOMATION_LABELS[kind]}</b> is switched off.`,
+        r,
+        isOwner() ? `<button type="button" class="btn btn-primary" style="align-self:flex-start" data-turn-on="${kind}">Turn it on and try again</button>` : '<p class="card-note">Ask the owner to switch it on in Automations.</p>'
+      );
+      const on = el('test-result').querySelector('[data-turn-on]');
+      if (on) {
+        on.addEventListener('click', async () => {
+          await patch(`/api/automations/${AUTOMATION_KEYS[kind]}`, { enabled: true });
+          marketing(kind);
+        });
+      }
+      return;
+    }
+    const why = r.decision && r.decision.action === 'skip' && r.decision.reason === 'Not opted in to offers'
+      ? 'Nothing was sent: this customer hasn\'t agreed to get messages. Tick the box above to try it as someone who has.'
+      : null;
+    showResult(why || decisionText(r.decision, sentText) || OFF_NOTE(AUTOMATION_LABELS[kind]), r);
+  });
+}
+
+// Your own reminders and alerts (they also pop up as notifications).
+async function alertTest(kind) {
+  const w = freshCustomer();
+  await busy(async () => {
+    if (kind === 'push') {
+      try {
+        const r = await post('/api/push/test');
+        showResult(`Test notification sent to ${r.sent} of your device${r.devices === 1 ? '' : 's'}. It should pop up in a few seconds.`, { replies: null });
+      } catch (err) {
+        showResult(`${escapeHtml(err.message)}. <a href="#/team">Turn notifications on</a> on this device, then try again.`, { replies: null });
+      }
+      return;
+    }
+    if (kind === 'follow-up') {
+      const r = await post('/api/test/follow-up', w);
+      showResult(
+        `A reminder for <b>${escapeHtml(w.name)}</b> is due now. It's on <a href="#/home">Home</a> under "Needs your attention", and it pops up on devices that have notifications on. Tap Done on their profile to clear it.`,
+        { replies: null },
+        `<a class="btn btn-dark" style="align-self:flex-start" href="#/customers/${w.phone}">Open their profile</a>`
+      );
+      return;
+    }
+    if (kind === 'birthday') {
+      const r = await post('/api/test/birthday', w);
+      showResult(
+        `<b>${escapeHtml(w.name)}</b> has a birthday today. It's on <a href="#/home">Home</a>, and it pops up on devices that have notifications on.`,
+        { replies: null },
+        `<a class="btn btn-dark" style="align-self:flex-start" href="#/customers/${w.phone}">Open their profile</a>`
+      );
+      return;
+    }
+    if (kind === 'overdue') {
+      const r = await post('/api/test/overdue-ticket', w);
+      showResult(
+        `Ticket #${r.ticketNumber} from <b>${escapeHtml(w.name)}</b> has now waited over ${r.hours} hours. It shows as <b>Overdue</b> on <a href="#/home">Home</a> and in the inbox, and it pops up on devices that have notifications on (plus a WhatsApp alert to your own number once WhatsApp is connected).`,
+        { replies: null, conversationId: r.conversationId }
+      );
+    }
   });
 }
 
@@ -230,8 +299,9 @@ export async function showTest() {
       </section>
 
       <section class="card test-card">
-        <h2>Reminders and alerts</h2>
-        <label class="inline"><input id="test-optin" type="checkbox" checked /> This customer said yes to WhatsApp messages (at checkout, or opted in to offers)</label>
+        <h2>Reminders to customers</h2>
+        <p class="card-note">Each try uses a new made-up customer, so you can repeat them as often as you like and real customers aren't changed.</p>
+        <label class="inline"><input id="test-optin" type="checkbox" checked /> The customer said yes to WhatsApp messages (at checkout, or opted in to offers)</label>
         <div class="test-actions">
           <button type="button" class="btn" id="test-cart">They leave a cart</button>
           <button type="button" class="btn" id="test-reorder">Their order shipped 3 weeks ago</button>
@@ -239,6 +309,17 @@ export async function showTest() {
         <div class="row-fields">
           <input id="test-product" value="Methi Papad" aria-label="Product" />
           <button type="button" class="btn" id="test-restock">It's back in stock</button>
+        </div>
+      </section>
+
+      <section class="card test-card">
+        <h2>Your reminders and alerts</h2>
+        <p class="card-note">What you and your team get. Turn on notifications on this device first (<a href="#/team">Team &amp; account</a>) to see them pop up.</p>
+        <div class="test-actions">
+          <button type="button" class="btn" data-alert="follow-up">A "Remind me" is due now</button>
+          <button type="button" class="btn" data-alert="birthday">A customer's birthday is today</button>
+          <button type="button" class="btn" data-alert="overdue">A ticket has waited too long</button>
+          <button type="button" class="btn" data-alert="push">Send me a test notification</button>
         </div>
       </section>
 
@@ -259,6 +340,7 @@ export async function showTest() {
   el('test-cart').addEventListener('click', () => marketing('cart'));
   el('test-reorder').addEventListener('click', () => marketing('reorder'));
   el('test-restock').addEventListener('click', () => marketing('restock'));
+  for (const b of view.querySelectorAll('[data-alert]')) b.addEventListener('click', () => alertTest(b.dataset.alert));
   renderOrders();
 
   if (!testCustomers) {

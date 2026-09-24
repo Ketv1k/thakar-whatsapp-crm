@@ -251,6 +251,16 @@ async function processRecentOrders(now = new Date()) {
   return { checked: orders.length, ...tally };
 }
 
+// One order, fresh from Shopify (for instant updates): saved, then any
+// update that's due goes out now.
+async function syncOne(gid) {
+  const data = await shopify.graphql(`query One($id: ID!) { order(id: $id) { ${ORDER_FIELDS} } }`, { id: gid });
+  if (!data.order) return null;
+  const { order } = await upsertOrder(mapOrder(data.order));
+  if (order.phone) await processOrder(order, await automations.getAll());
+  return order;
+}
+
 // Pulls changed orders from Shopify (checkpointed), then processes recent ones.
 async function syncOrders() {
   if (!shopify.isConfigured()) return { skipped: 'Shopify not connected' };
@@ -299,6 +309,7 @@ module.exports = {
   mapOrder,
   upsertOrder,
   syncOrders,
+  syncOne,
   processOrder,
   processRecentOrders,
   sendOrderEvent,

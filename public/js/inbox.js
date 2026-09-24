@@ -316,7 +316,7 @@ function messageHtml(m) {
       ${hasMedia ? mediaHtml(m) : ''}
       ${caption ? `<div class="caption">${linkify(escapeHtml(caption))}</div>` : ''}
       ${out && m.cart ? cartStatusHtml(m.cart) : ''}
-      <div class="meta">${escapeHtml(clock(m.createdAt))}${out ? tickHtml(m.status === 'failed' ? null : m.status, m.test) : ''}</div>
+      <div class="meta">${out && m.sentBy && m.sentBy.name ? `<span class="sender">${escapeHtml(m.sentBy.name)} ·</span>` : ''}${escapeHtml(clock(m.createdAt))}${out ? tickHtml(m.status === 'failed' ? null : m.status, m.test) : ''}</div>
       ${failed}
       ${buttons}
     </div>`;

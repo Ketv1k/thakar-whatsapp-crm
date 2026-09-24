@@ -35,7 +35,7 @@ router.post('/:id/reply', asyncHandler(async (req, res) => {
   if (!ticket) return res.status(404).json({ error: 'ticket not found' });
   const conversation = await Conversation.findById(ticket.conversationId);
   if (!conversation) return res.status(404).json({ error: 'conversation not found' });
-  res.json(await replyAsFounder({ conversation, body: req.body.body, ticket }));
+  res.json(await replyAsFounder({ conversation, body: req.body.body, ticket, by: req.user }));
 }));
 
 router.post('/:id/resolve', asyncHandler(async (req, res) => {
@@ -44,6 +44,7 @@ router.post('/:id/resolve', asyncHandler(async (req, res) => {
 
   ticket.status = 'resolved';
   ticket.resolvedAt = new Date();
+  ticket.resolvedBy = req.user ? req.user.name : null;
   await ticket.save();
 
   // Free up the conversation so future messages go back to normal triage

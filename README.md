@@ -11,7 +11,7 @@ src/
   app.js              Express app (routes + auth) - mount this into your existing backend, or run standalone
   server.js           Standalone entry point (npm start) - connects DB, serves the PWA, starts the jobs
   models/              Customer, Conversation, Message, Ticket, Order, AbandonedCheckout, StockAlert,
-                       Template, Campaign, Group, Setting (Mongoose)
+                       Template, Campaign, Group, User, Session, PushSubscription, Setting (Mongoose)
   services/
     whatsapp.js        Send/receive via Meta's WhatsApp Cloud API (+ download customers' photos/voice notes)
     outbound.js         Every message the app sends goes through here (text + templates), with delivery tracking
@@ -32,6 +32,10 @@ src/
     cartLinks.js        Carts built in a chat: the link, the message, and matching orders back to it
     customerInsights.js Past order import + per-customer numbers (products, order gap, COD)
     customerTimeline.js One customer's history for their profile
+    users.js            Team logins: passwords, sessions, the owner access code
+    pushNotify.js       Notifications on the team's phones and computers
+    shopifyLive.js      Instant updates from Shopify + tags/notes/consent back to Shopify
+    shopifyOrders.js    One order in full, and note / tag / cancel from the chat
     contactImport.js    CSV import of a customer list (with opt-in)
     reorder.js          Reorder reminders
     backInStock.js      Back-in-stock alerts
@@ -192,6 +196,9 @@ Set `TEST_MODE=true` and:
   auto-answered from Shopify, a ticket created, or waiting in the Inbox, plus the reply the
   customer *would* receive. Test photos and voice notes show a stand-in picture and a short tune.
   When a test customer writes back, your earlier replies get blue "read" ticks, as on WhatsApp;
+- reminder tests (cart, reorder, back in stock) use a new made-up customer each time, so they
+  can be repeated and never change real customers; "Your reminders and alerts" tries a due
+  "Remind me", a birthday, an overdue ticket and a test notification;
 - **nothing is ever sent on WhatsApp**: every outgoing message is saved and logged
   (`[test mode] not sent to …`) instead.
 
@@ -267,8 +274,8 @@ automatically — no manual data entry:
   buy most, and where they live.
 - **History** — one timeline: orders, chats (one line per day), campaigns and reminders they
   got, cart links, carts they left, problems reported, restock requests, opt-in / STOP.
-- **Remind me** — a follow-up date and note; it shows on Home under "Needs your attention"
-  on the day. **Birthday** — day and month; shows on Home on the day and in the
+- **Remind me** — a follow-up date and note (Today / Tomorrow / In 3 days / Next week / pick a
+  date); it shows on Home under "Needs your attention" and as a notification when it's due. **Birthday** — day and month; shows on Home on the day and in the
   "Birthday this month" filter.
 - VIP customers get a **VIP** badge in the chat list.
 
@@ -361,6 +368,46 @@ Anyone who replied STOP is always left out.
 All three are marketing messages: opted-in customers only (cart reminders also accept the
 consent given at checkout; back-in-stock needs only the customer's own request), never at night
 (`QUIET_HOURS`, default 9pm–9am India time).
+
+## Team logins
+
+- Everyone gets their own login (email + password) on **Team & account**. The owner adds
+  people and gets a temporary password to share once; they can change it after logging in.
+  **Remove** logs someone out everywhere at once. The `INBOX_API_KEY` access code still logs in
+  as the owner.
+- **Owner**: everything. **Team member**: chats, cart links, customers (notes, tags, reminders)
+  and COD orders — no campaigns, automations, list downloads/imports, bulk opt-in, cancelling
+  orders or team changes (the server enforces this, not just the screens).
+- Replies and cart links show who sent them; resolved tickets record who resolved them.
+- Passwords are hashed (scrypt); sessions last 60 days and only a hash of the token is stored.
+  Too many wrong passwords locks that email/device out for 15 minutes.
+
+## Notifications
+
+On **Team & account**, each person can turn on notifications for that phone or computer
+(Web Push; on iPhone the app must be added to the home screen first). They pop up for: a
+customer message that needs a reply, a new ticket, a COD cancel request, a "Remind me" that's
+due, today's birthdays (10am), and tickets waiting longer than `SLA_HOURS`. One chat gives at
+most one notification a minute. Keys are created automatically; `PUSH_CONTACT` (a `mailto:`)
+is optional.
+
+## Shopify, live and two-way
+
+- **Instant updates**: at start-up the app asks Shopify to call `/shopify/webhooks` for orders,
+  fulfillments, customers, checkouts, stock and products (signed with the app's secret and
+  checked). Order messages go out the moment Shopify has the change. It uses the service's
+  public address (`RENDER_EXTERNAL_URL` on Render, or `PUBLIC_URL`); the regular syncs keep
+  running as a safety net, and the subscriptions are re-checked daily. Status is on Automations.
+  (On Render's free plan the first call after the app slept can be slow; Shopify retries.)
+- **Two-way customers**: customer tags and notes come from Shopify, and changes made in the app
+  go back to Shopify straight away (retried if Shopify doesn't answer). The first time, anything
+  written in the app that Shopify doesn't have is added to Shopify, so nothing is lost. Who gets
+  WhatsApp offers is written to Shopify's WhatsApp marketing consent (not in test mode).
+- **Orders next to the chat**: **Details** on any order shows items, prices, payment, what's
+  left to collect, the address, tracking, note and tags, with **Open in Shopify**, **Send
+  tracking in chat**, **Add note**, **Add tag** and (owner) **Cancel order** — cancelling
+  restocks the items and makes no refund (refund online payments in Razorpay).
+- These write to your real Shopify store, test mode or not.
 
 ## Going live checklist
 

@@ -11,6 +11,7 @@ const { formatMoney } = require('../utils/money');
 const { replyAsFounder } = require('../services/founderReply');
 const { asyncHandler } = require('../utils/asyncHandler');
 const aiAnswer = require('../services/aiAnswer');
+const users = require('../services/users');
 
 const router = express.Router();
 
@@ -21,6 +22,8 @@ router.get('/config', (req, res) => {
     testMode: process.env.TEST_MODE === 'true',
     founderName: String(process.env.FOUNDER_NAME || '').trim().slice(0, 40),
     ai: aiAnswer.status(),
+    // Who is logged in on this device: { name, role: 'owner' | 'team' }.
+    user: users.publicUser(req.user),
   });
 });
 
@@ -59,7 +62,7 @@ router.get('/conversations/:id/messages', asyncHandler(async (req, res) => {
 router.post('/conversations/:id/reply', asyncHandler(async (req, res) => {
   const conversation = await Conversation.findById(req.params.id);
   if (!conversation) return res.status(404).json({ error: 'conversation not found' });
-  res.json(await replyAsFounder({ conversation, body: req.body.body }));
+  res.json(await replyAsFounder({ conversation, body: req.body.body, by: req.user }));
 }));
 
 // Builds a cart from the products the founder picked and sends the customer
@@ -93,6 +96,7 @@ router.post('/conversations/:id/cart-link', asyncHandler(async (req, res) => {
   const url = cartLinks.buildCartUrl(shopify.storeUrl(), norm.items, cartId);
   const { text, total } = cartLinks.cartMessage(lines, url);
   const message = await replyAsFounder({
+    by: req.user,
     conversation,
     body: text,
     preview: `🛒 Cart link · ${formatMoney(total)}`,

@@ -13,17 +13,26 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <!-- Login: enter the INBOX_API_KEY once, stored on this device only -->
+  <!-- Login: your email and password (or the owner's access code), once per device -->
   <div id="login-screen" class="login hidden">
     <div class="login-card">
       <div class="brand-mark">
         <span class="brand-name">Thakar Kitchen</span>
         <span class="brand-sub">WhatsApp inbox</span>
       </div>
-      <p>Enter your access code to continue. You'll only need to do this once on this device.</p>
-      <input id="login-input" type="password" autocomplete="off" placeholder="Access code" aria-label="Access code" />
-      <button id="login-button" class="btn btn-primary btn-block" type="button">Continue</button>
-      <div id="login-error" class="login-error hidden">That access code was rejected. Check it and try again.</div>
+      <p id="login-note">Log in with your email and password. You'll only need to do this once on this device.</p>
+      <form id="login-form" class="login-form" autocomplete="on">
+        <div id="login-email-fields" class="login-fields">
+          <input id="login-email" type="email" autocomplete="username" placeholder="Email" aria-label="Email" />
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password" />
+        </div>
+        <div id="login-code-fields" class="login-fields hidden">
+          <input id="login-input" type="password" autocomplete="off" placeholder="Access code" aria-label="Access code" />
+        </div>
+        <button id="login-button" class="btn btn-primary btn-block" type="submit">Log in</button>
+      </form>
+      <button id="login-switch" class="link-btn" type="button">Owner? Use the access code instead</button>
+      <div id="login-error" class="login-error hidden"></div>
     </div>
   </div>
 
@@ -41,13 +50,14 @@
         <a href="#/orders" data-nav="orders"><span class="ico" data-icon="wallet"></span><span>COD orders</span></a>
         <a href="#/automations" data-nav="automations"><span class="ico" data-icon="bolt"></span><span>Automations</span></a>
         <a href="#/campaigns" data-nav="campaigns"><span class="ico" data-icon="megaphone"></span><span>Campaigns</span></a>
+        <a href="#/team" data-nav="team"><span class="ico" data-icon="user"></span><span>Team &amp; account</span></a>
         <a href="#/test" data-nav="test" class="test-only hidden"><span class="ico" data-icon="flask"></span><span>Test</span></a>
       </nav>
       <div class="side-foot">
         <div class="test-chip test-only hidden"><span class="ico" data-icon="alert"></span>Test mode: nothing is sent</div>
         <div class="me">
           <span class="me-avatar" id="me-avatar">TK</span>
-          <div><div class="me-name" id="me-name">Thakar Kitchen</div><div class="me-role">Founder</div></div>
+          <div><div class="me-name" id="me-name">Thakar Kitchen</div><div class="me-role" id="me-role">Owner</div></div>
         </div>
         <button id="logout-button" class="link-btn" type="button">Log out on this device</button>
       </div>
@@ -112,6 +122,7 @@
       <section id="view-orders" class="view hidden" aria-label="COD orders"></section>
       <section id="view-test" class="view hidden" aria-label="Test"></section>
       <section id="view-more" class="view hidden" aria-label="More"></section>
+      <section id="view-team" class="view hidden" aria-label="Team and account"></section>
     </main>
 
     <!-- Phone navigation -->

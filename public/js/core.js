@@ -29,6 +29,12 @@ export function saveKey(key) {
 
 export const el = (id) => document.getElementById(id);
 
+// The owner can do everything; team members can't send campaigns, change
+// automations, import/download lists or manage the team.
+export function isOwner() {
+  return !state.config.user || state.config.user.role === 'owner';
+}
+
 // Set by main.js: what to do when the access code is rejected.
 let onUnauthorized = () => {};
 export function setUnauthorizedHandler(fn) {

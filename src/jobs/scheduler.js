@@ -22,6 +22,9 @@ const JOBS = {
   reorder: () => require('../services/reorder').run(),
   customers: () => require('../services/customerSync').syncCustomers(),
   insights: () => require('../services/customerInsights').run(),
+  reminders: () => require('../services/pushNotify').remindersDue(),
+  shopifyPush: () => require('../services/shopifyLive').pushPending(),
+  shopifyHooks: () => require('../services/shopifyLive').ensureWebhooks(),
   campaigns: () => require('../services/campaigns').runDue(),
 };
 
@@ -59,8 +62,11 @@ function startScheduler() {
   schedule('20 * * * *', 'reorder');
   schedule('40 */6 * * *', 'customers');
   schedule('25 * * * *', 'insights');
+  schedule('*/5 * * * *', 'reminders');
+  schedule('3,8,13,18,23,28,33,38,43,48,53,58 * * * *', 'shopifyPush');
+  schedule('50 4 * * *', 'shopifyHooks');
   // Catch up shortly after start-up (e.g. after the server slept).
-  setTimeout(() => runJob('orders').then(() => runJob('customers')).then(() => runJob('insights')), 20 * 1000).unref();
+  setTimeout(() => runJob('shopifyHooks').then(() => runJob('orders')).then(() => runJob('customers')).then(() => runJob('insights')), 20 * 1000).unref();
   console.log('[jobs] automations scheduled');
 }
 

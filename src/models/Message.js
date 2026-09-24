@@ -32,6 +32,11 @@ const messageSchema = new mongoose.Schema(
     statusAt: { type: Date, default: null },
     statusError: { type: String, default: undefined },
     sentByFounder: { type: Boolean, default: false },
+    // Who on the team sent it (replies and cart links).
+    sentBy: {
+      type: new mongoose.Schema({ id: String, name: String }, { _id: false }),
+      default: undefined,
+    },
     // Set on messages the app sent by itself: 'order_status', 'ticket', an
     // acknowledgment category from services/autoAck.js ('greeting', 'photo'...),
     // or an automation ('order_shipped', 'cod_request', 'cart_reminder'...,

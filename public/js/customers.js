@@ -4,7 +4,7 @@
 // to grow the list of people who get offers.
 import {
   state, api, post, put, del, el, escapeHtml, formatPhone, avatar, ago, money, toast, ico, isCurrent, plural,
-  SEGMENT_LABELS, STAGE_PILLS,
+  SEGMENT_LABELS, STAGE_PILLS, isOwner,
 } from './core.js';
 import { renderProfile, loadProfile } from './profile.js';
 
@@ -73,7 +73,7 @@ function renderShell() {
           <p class="page-sub" data-sub>Loading…</p>
         </div>
         <div class="head-actions">
-          <button type="button" class="btn" data-grow-toggle aria-expanded="false">${ico('megaphone')}Grow your offers list</button>
+          ${isOwner() ? `<button type="button" class="btn" data-grow-toggle aria-expanded="false">${ico('megaphone')}Grow your offers list</button>` : ''}
           <label class="search wide">${ico('search')}<input type="search" placeholder="Name, number, city or tag" aria-label="Search customers" data-q value="${escapeHtml(list.q)}" /></label>
         </div>
       </header>
@@ -98,10 +98,13 @@ function renderShell() {
       refresh();
     }, 300);
   });
-  view.querySelector('[data-grow-toggle]').addEventListener('click', () => {
-    list.growOpen = !list.growOpen;
-    renderGrow();
-  });
+  const growToggle = view.querySelector('[data-grow-toggle]');
+  if (growToggle) {
+    growToggle.addEventListener('click', () => {
+      list.growOpen = !list.growOpen;
+      renderGrow();
+    });
+  }
 }
 
 // ---------- Stages and saved groups ----------
@@ -355,10 +358,11 @@ function renderBar() {
       <b>${escapeHtml(groupLabel())} · ${plural(d.total, 'customer')}</b>
       <span>${d.optedIn.toLocaleString('en-IN')} of them get offers, so they can get a campaign.</span>
     </div>
-    <button type="button" class="btn btn-ghost" data-download>${ico('download')}Download list</button>
-    ${notOptedIn > 0 && list.filters.offers !== 'yes' ? '<button type="button" class="btn btn-ghost" data-bulk>Opt them in…</button>' : ''}
-    <a class="btn btn-saffron" href="${escapeHtml(campaignHref())}">Send a campaign to them</a>`;
-  bar.querySelector('[data-download]').addEventListener('click', download);
+    ${isOwner() ? `<button type="button" class="btn btn-ghost" data-download>${ico('download')}Download list</button>` : ''}
+    ${isOwner() && notOptedIn > 0 && list.filters.offers !== 'yes' ? '<button type="button" class="btn btn-ghost" data-bulk>Opt them in…</button>' : ''}
+    ${isOwner() ? `<a class="btn btn-saffron" href="${escapeHtml(campaignHref())}">Send a campaign to them</a>` : ''}`;
+  const dl = bar.querySelector('[data-download]');
+  if (dl) dl.addEventListener('click', download);
   const bulk = bar.querySelector('[data-bulk]');
   if (bulk) {
     bulk.addEventListener('click', async () => {
@@ -381,7 +385,8 @@ function renderBar() {
 async function renderGrow() {
   const view = el('view-customers');
   const card = view.querySelector('[data-grow]');
-  view.querySelector('[data-grow-toggle]').setAttribute('aria-expanded', String(list.growOpen));
+  const toggle = view.querySelector('[data-grow-toggle]');
+  if (toggle) toggle.setAttribute('aria-expanded', String(list.growOpen));
   card.classList.toggle('hidden', !list.growOpen);
   if (!list.growOpen) return;
   card.innerHTML = '<div class="muted">Loading…</div>';

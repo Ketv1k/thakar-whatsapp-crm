@@ -162,6 +162,12 @@ function statusStrip() {
     ? '<span class="pill pill-red">Shopify not connected</span>'
     : `Orders checked ${orders.lastRunAt ? `${escapeHtml(ago(orders.lastRunAt))} ago` : 'soon'}${orders.lastError ? ` <span class="warn">(last check failed: ${escapeHtml(orders.lastError)})</span>` : ''}
        <button type="button" class="link-btn" data-run="orders">${orders.running ? 'Checking…' : 'Check now'}</button>`;
+  const live = data.shopifyLive || {};
+  const liveLine = !data.shopifyConnected
+    ? ''
+    : live.instant
+    ? `<span class="pill pill-green">Instant updates on</span> Shopify tells the app the moment orders, customers, carts and stock change${live.lastEventAt ? ` (last one ${escapeHtml(ago(live.lastEventAt))} ago)` : ''}. Tags and notes you change here go to Shopify${live.consentToShopify ? ', and so does who gets WhatsApp offers' : ''}.${live.waitingToSend ? ` ${live.waitingToSend} change${live.waitingToSend === 1 ? '' : 's'} waiting to reach Shopify.` : ''}`
+    : `<span class="pill pill-amber">Instant updates off</span> ${escapeHtml(live.publicUrl ? (live.errors && live.errors[0]) || 'Not connected yet.' : 'They switch on by themselves once the app runs at its web address (on Render).')} ${live.publicUrl ? '<button type="button" class="link-btn" data-live>Connect now</button>' : ''}`;
   const catalog = Object.values(data.automations).map((a) => a.template).filter(Boolean);
   const approved = catalog.filter((t) => t.status === 'APPROVED').length;
   const templatesLine = data.testMode
@@ -173,6 +179,7 @@ function statusStrip() {
     <section class="status-strip">
       <div>${ico('chat')}<span>${whatsapp}</span></div>
       <div>${ico('box')}<span>${shopify}</span></div>
+      ${liveLine ? `<div>${ico('bolt')}<span>${liveLine}</span></div>` : ''}
       <div>${ico('check')}<span>${templatesLine}</span></div>
       <div>${ico('clock')}<span>Offers and reminders are never sent at night (9pm to 9am).</span></div>
     </section>`;
@@ -264,6 +271,19 @@ function render() {
       toast(err.message);
     }
   });
+  const liveBtn = view.querySelector('[data-live]');
+  if (liveBtn) {
+    liveBtn.addEventListener('click', async () => {
+      liveBtn.textContent = 'Connecting…';
+      try {
+        await post('/api/automations/shopify-live');
+        toast('Instant updates from Shopify are on');
+      } catch (err) {
+        toast(err.message);
+      }
+      load();
+    });
+  }
   const run = view.querySelector('[data-run]');
   if (run) {
     run.addEventListener('click', async () => {
