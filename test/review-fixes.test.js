@@ -6,17 +6,10 @@ const { isRetryable } = require('../src/services/whatsapp');
 const { shouldRetry } = require('../src/services/outbound');
 const { detectKeyword } = require('../src/services/optIn');
 
-test('order updates need WhatsApp permission', () => {
-  const individual = { mode: 'individual' };
-  const checkout = { mode: 'checkout', wording: 'I agree to get order updates on WhatsApp' };
-  assert.equal(consent.orderUpdatesAllowed({}, individual).allowed, false);
-  assert.equal(consent.orderUpdatesAllowed(null, individual).reason, 'No WhatsApp permission for order updates');
-  assert.equal(consent.orderUpdatesAllowed({ optedInMarketing: true }, individual).allowed, true);
-  assert.equal(consent.orderUpdatesAllowed({ orderUpdatesOptIn: true }, individual).allowed, true);
-  // The owner confirmed the checkout asks every customer.
-  assert.equal(consent.orderUpdatesAllowed({}, checkout).allowed, true);
-  // STOP ALL beats everything.
-  assert.equal(consent.orderUpdatesAllowed({ noWhatsApp: true, optedInMarketing: true }, checkout).allowed, false);
+test('order updates go to everyone who orders, unless they replied STOP ALL', () => {
+  assert.deepEqual(consent.orderUpdatesAllowed(null), { allowed: true, basis: 'gave their number when ordering' });
+  assert.equal(consent.orderUpdatesAllowed({ optedInMarketing: false, optedOutAt: new Date() }).allowed, true);
+  assert.deepEqual(consent.orderUpdatesAllowed({ noWhatsApp: true, optedInMarketing: true }), { allowed: false, reason: 'They asked for no WhatsApp messages (STOP ALL)' });
 });
 
 test('bulk opt-ins need a stated reason, saved as proof', () => {
@@ -59,9 +52,4 @@ test('STOP ALL stops every message; STOP only offers', () => {
   assert.equal(detectKeyword('Stop all messages'), 'stop_all');
   assert.equal(detectKeyword('stop'), 'stop');
   assert.equal(detectKeyword('start'), 'start');
-});
-
-test('the checkout wording has to mention WhatsApp', async () => {
-  await assert.rejects(consent.setOrderBasis({ mode: 'checkout', wording: 'I agree to get updates by SMS' }), /mention WhatsApp/);
-  await assert.rejects(consent.setOrderBasis({ mode: 'checkout', wording: 'WhatsApp' }), /exact words/);
 });

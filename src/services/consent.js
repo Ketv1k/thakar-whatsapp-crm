@@ -1,57 +1,22 @@
-// WhatsApp permission. Meta only allows a business to message people first
-// (order updates, reminders, offers) when they agreed to get WhatsApp
-// messages from it - and asks businesses to honour opt-outs. This is where
-// the app decides, and records how each person agreed.
+// WhatsApp permission, and how each person agreed.
 //
-//  - Offers (campaigns, cart/reorder/back-in-stock reminders): the customer
-//    opted in to offers (optedInMarketing), with proof in optInEvidence.
-//  - Order updates (confirmed, COD, shipped, delivered): either the owner has
-//    confirmed that the checkout tells every customer they'll get order
-//    updates on WhatsApp (the wording is stored), or this customer agreed
-//    (opted in to offers, ticked WhatsApp at checkout, replied START...).
-//  - Nobody who replied STOP ALL gets anything.
+//  - Order updates (confirmed, COD, shipped, delivered): every customer who
+//    orders - they give their number at checkout for exactly this. Only a
+//    STOP ALL reply stops them.
+//  - Offers (campaigns, cart/reorder/back-in-stock reminders): only customers
+//    who opted in to offers (optedInMarketing), with proof in optInEvidence.
 const Customer = require('../models/Customer');
-const settings = require('./settings');
 
-const ORDER_KEY = 'consent:orders';
-
-async function orderBasis() {
-  const s = await settings.get(ORDER_KEY, {});
-  return s.mode === 'checkout' && s.wording
-    ? { mode: 'checkout', wording: s.wording, confirmedAt: s.confirmedAt || null, confirmedBy: s.confirmedBy || '' }
-    : { mode: 'individual' };
-}
-
-// The owner confirms (or withdraws) that the checkout asks for WhatsApp
-// order updates. The wording and who confirmed it are kept as proof.
-async function setOrderBasis({ mode, wording, by }) {
-  if (mode === 'checkout') {
-    const text = String(wording || '').trim().slice(0, 500);
-    if (text.length < 15 || !/whats\s?app/i.test(text)) {
-      throw Object.assign(new Error('Paste the exact words your checkout shows. They need to mention WhatsApp.'), { status: 400, expose: true });
-    }
-    await settings.set(ORDER_KEY, { mode: 'checkout', wording: text, confirmedAt: new Date(), confirmedBy: by || '' });
-  } else {
-    await settings.set(ORDER_KEY, { mode: 'individual', changedAt: new Date(), changedBy: by || '' });
-  }
-  return orderBasis();
-}
+const ORDER_BASIS = 'gave their number when ordering';
 
 // Pure: may this customer get order updates on WhatsApp?
-function orderUpdatesAllowed(customer, basis) {
+function orderUpdatesAllowed(customer) {
   if (customer && customer.noWhatsApp) return { allowed: false, reason: 'They asked for no WhatsApp messages (STOP ALL)' };
-  if (basis && basis.mode === 'checkout') return { allowed: true, basis: 'checkout' };
-  if (customer && customer.optedInMarketing) return { allowed: true, basis: 'opted in to offers' };
-  if (customer && customer.orderUpdatesOptIn) return { allowed: true, basis: 'agreed to order updates' };
-  return { allowed: false, reason: 'No WhatsApp permission for order updates' };
+  return { allowed: true, basis: ORDER_BASIS };
 }
 
 async function canSendOrderUpdates(phone) {
-  const [customer, basis] = await Promise.all([
-    Customer.findOne({ phone }).select('optedInMarketing orderUpdatesOptIn noWhatsApp').lean(),
-    orderBasis(),
-  ]);
-  return orderUpdatesAllowed(customer, basis);
+  return orderUpdatesAllowed(await Customer.findOne({ phone }).select('noWhatsApp').lean());
 }
 
 function stamp(date = new Date()) {
@@ -80,4 +45,4 @@ function bulkEvidence(reason, what, by) {
   return `${why.slice(0, 200)} — ${what}${by ? ` by ${by}` : ''} on ${stamp()}`;
 }
 
-module.exports = { orderBasis, setOrderBasis, orderUpdatesAllowed, canSendOrderUpdates, optInFields, bulkEvidence, stamp };
+module.exports = { orderUpdatesAllowed, canSendOrderUpdates, optInFields, bulkEvidence, stamp };

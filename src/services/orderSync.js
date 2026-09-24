@@ -233,11 +233,15 @@ async function processOrder(order, autos, now = new Date()) {
   const due = dueEvents(order, autos, now);
   let send = due.send;
   const skip = [...due.skip];
-  // Only to customers with WhatsApp permission (services/consent.js).
+  const results = {};
+  // Not to customers who replied STOP ALL (services/consent.js).
   if (send.length) {
-    const permission = order.simulated && order.testAgreed ? { allowed: true } : await consent.canSendOrderUpdates(order.phone);
+    const permission = await consent.canSendOrderUpdates(order.phone);
     if (!permission.allowed) {
-      skip.push(...send.map((event) => ({ event, reason: permission.reason })));
+      for (const event of send) {
+        skip.push({ event, reason: permission.reason });
+        results[event] = 'stopped';
+      }
       send = [];
     }
   }
@@ -247,7 +251,6 @@ async function processOrder(order, autos, now = new Date()) {
       { $set: { [`notified.${s.event}`]: now, [`notifyNotes.${s.event}`]: s.reason } }
     );
   }
-  const results = {};
   for (const event of send) results[event] = await sendOrderEvent(order, event);
   return results;
 }

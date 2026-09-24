@@ -223,10 +223,9 @@ async function checkoutConsentPhones() {
 }
 
 router.get('/grow', asyncHandler(async (req, res) => {
-  const [optedIn, shopifyWhatsApp, orderBasis, checkoutPhones, link] = await Promise.all([
+  const [optedIn, shopifyWhatsApp, checkoutPhones, link] = await Promise.all([
     Customer.countDocuments({ optedInMarketing: true }),
     Customer.countDocuments({ optInSource: 'shopify_whatsapp', optedInMarketing: true }),
-    consent.orderBasis(),
     checkoutConsentPhones(),
     settings.get('optin:link', {}),
   ]);
@@ -235,7 +234,6 @@ router.get('/grow', asyncHandler(async (req, res) => {
   res.json({
     optedIn,
     shopifyWhatsApp,
-    orderUpdates: orderBasis.mode,
     checkoutConsent: checkoutPhones.length,
     link: { number: number || '', url, qr: url ? await QRCode.toString(url, { type: 'svg', margin: 1 }) : null },
   });
@@ -361,7 +359,7 @@ router.get('/:phone', asyncHandler(async (req, res) => {
     optedOutAt: customer.optedOutAt || null,
     optInEvidence: customer.optInEvidence || '',
     noWhatsApp: !!customer.noWhatsApp,
-    orderUpdates: consent.orderUpdatesAllowed(customer, await consent.orderBasis()),
+    orderUpdates: consent.orderUpdatesAllowed(customer),
     city: customer.city || '',
     state: customer.state || '',
     pincode: customer.pincode || '',

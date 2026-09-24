@@ -194,7 +194,7 @@ Set `TEST_MODE=true` and:
 - the inbox shows a "Test mode" label and a **Test** page, where you can also place pretend
   orders (prepaid or COD), tap the customer's Confirm / Cancel, ship and deliver them, leave a
   cart, and trigger reorder and back-in-stock messages - all through the real automation code
-  (untick "They agreed to WhatsApp order updates" to see an order that gets no messages);
+  (a test customer who replied STOP ALL gets no order messages, as in real life);
 - on the Test page you pick one of your real Shopify customers (or type any number), choose or
   type their message (or send a photo / voice note), and see exactly what happens:
   auto-answered from Shopify, a ticket created, or waiting in the Inbox, plus the reply the
@@ -311,13 +311,9 @@ since its last check (so it catches up after the server slept) and sends:
 - **Shipped** — with the tracking link (India Post) or the order status page.
 - **Out for delivery / Delivered** — only if your courier updates delivery status in Shopify.
 
-**Permission.** WhatsApp only lets you message customers who agreed to it. By default order
-updates go only to customers who agreed on WhatsApp: opted in to offers, ticked the WhatsApp box
-in Magic Checkout, or replied START. If your checkout tells every customer they'll get order
-updates on WhatsApp, paste those exact words on Automations → **Who may get WhatsApp messages**
-and confirm; from then on every customer gets order updates (the words, who confirmed and when
-are kept as proof). Anyone who replied **STOP ALL** gets nothing. Each order that was skipped
-says why on its row.
+**Who gets them.** Every customer who orders: they give their number at checkout for this.
+Only a customer who replied **STOP ALL** gets none (the order's row says why); **START** turns
+them back on. Offers are separate and need an opt-in (below).
 
 **Change of mind on COD.** A customer can change their answer until the order is shipped or
 cancelled: the old WhatsApp tag is removed from the order in Shopify before the new one is added,
@@ -457,10 +453,8 @@ is optional.
 3. Automations → **Submit all to Meta** (this includes `team_ticket_alert` for your overdue-ticket
    alerts). Approval usually takes minutes to a day; **Refresh** shows the status. Nothing that
    needs a template is sent until it's approved.
-4. Automations → **Who may get WhatsApp messages**: if your checkout says customers get order
-   updates on WhatsApp, paste those words and confirm; otherwise only customers who agreed get them.
-5. Switch on the automations you want. Decide who gets offers (see above).
-6. On Render, switch to a paid plan so the background jobs run all the time.
+4. Switch on the automations you want. Decide who gets offers (see above).
+5. On Render, switch to a paid plan so the background jobs run all the time.
 
 ## Ideas for later
 - Product catalog messages

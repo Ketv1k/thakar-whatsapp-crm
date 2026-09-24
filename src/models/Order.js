@@ -36,7 +36,6 @@ const orderSchema = new mongoose.Schema(
     shopifyTest: { type: Boolean, default: false },
     // Made by test mode's "place a test order" - never exists in Shopify.
     simulated: { type: Boolean, default: false },
-    testAgreed: { type: Boolean, default: undefined },
     total: { type: Number, default: 0 },
     outstanding: { type: Number, default: 0 },
     currency: { type: String, default: 'INR' },

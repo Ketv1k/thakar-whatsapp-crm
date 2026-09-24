@@ -1,6 +1,6 @@
 // Automations: the messages that go out by themselves, each with an on/off
 // switch, a preview, what it costs and how it's doing.
-import { state, api, post, patch, put, el, escapeHtml, ago, money, toast, ico, isCurrent, switchHtml, plural } from './core.js';
+import { state, api, post, patch, el, escapeHtml, ago, money, toast, ico, isCurrent, switchHtml, plural } from './core.js';
 
 let data = null;
 
@@ -187,25 +187,14 @@ function statusStrip() {
 
 function optInCard() {
   const o = data.optInFromShopify;
-  const p = data.orderPermission || { mode: 'individual' };
-  const orders = p.mode === 'checkout'
-    ? `<p class="card-note"><span class="pill pill-green">Everyone who orders</span> You confirmed on ${escapeHtml(new Date(p.confirmedAt).toLocaleDateString())}${p.confirmedBy ? ` (${escapeHtml(p.confirmedBy)})` : ''} that your checkout shows: <i>“${escapeHtml(p.wording)}”</i></p>
-       <button type="button" class="link-btn" data-order-perm="off">My checkout doesn't say this any more</button>`
-    : `<p class="card-note"><span class="pill pill-amber">Only customers who agreed</span> Right now order updates go only to the <b>${plural(p.customersWithPermission || 0, 'customer')}</b> who agreed on WhatsApp, ticked WhatsApp at checkout or opted in to offers. Everyone else gets no order updates.</p>
-       <details class="perm-form"><summary>My checkout tells every customer they'll get order updates on WhatsApp</summary>
-         <label class="field"><span>Paste the exact words your checkout shows (they must mention WhatsApp)</span>
-           <textarea data-order-wording rows="2" placeholder="e.g. I agree to receive order updates from Thakar Kitchen on WhatsApp"></textarea></label>
-         <label class="check-line"><input type="checkbox" data-order-confirm /> Every customer sees these words before they place an order</label>
-         <button type="button" class="btn btn-small btn-dark" data-order-perm="checkout">Confirm</button>
-       </details>`;
   return `
     <article class="auto-card optin-card">
-      <div class="auto-head"><span class="auto-icon">${ico('users')}</span><h2>Who may get WhatsApp messages</h2></div>
-      <p class="auto-desc">WhatsApp only lets a business message people who agreed to hear from it on WhatsApp.</p>
+      <div class="auto-head"><span class="auto-icon">${ico('users')}</span><h2>Who gets WhatsApp messages</h2></div>
       <h3 class="perm-h">Order updates (confirmed, COD, shipped, delivered)</h3>
-      ${orders}
+      <p class="card-note">Every customer who orders. They give their number at checkout for this.</p>
       <h3 class="perm-h">Offers, reminders and campaigns</h3>
-      <p class="card-note"><b>${plural(o.optedIn, 'customer')}</b> ${o.optedIn === 1 ? 'has' : 'have'} opted in, each with a record of how they agreed (on their profile). Customers who agreed to WhatsApp marketing in Shopify are added automatically; SMS consent isn't used. Customers reply <b>STOP</b> to stop offers, <b>STOP ALL</b> to stop every message${p.stopAll ? ` (${p.stopAll} have)` : ''}, or <b>START</b> to get them again.</p>
+      <p class="card-note">Only customers who opted in: <b>${plural(o.optedIn, 'customer')}</b> so far, each with a record of how they agreed (on their profile). Customers who agreed to WhatsApp marketing in Shopify are added automatically.</p>
+      <p class="card-note">Customers reply <b>STOP</b> to stop offers, <b>STOP ALL</b> to stop every message, order updates too${data.stopAll ? ` (${plural(data.stopAll, 'customer')} ${data.stopAll === 1 ? 'has' : 'have'})` : ''}, or <b>START</b> to get them again.</p>
     </article>`;
 }
 
@@ -263,20 +252,6 @@ function render() {
         toast('Saved');
       } catch (err) {
         toast(`Not saved: ${err.message}`);
-      }
-    });
-  }
-  for (const b of view.querySelectorAll('[data-order-perm]')) {
-    b.addEventListener('click', async () => {
-      const mode = b.dataset.orderPerm;
-      if (mode === 'checkout' && !view.querySelector('[data-order-confirm]').checked) return toast('Tick the box to confirm every customer sees these words');
-      if (mode === 'off' && !confirm('Stop sending order updates to customers who haven\'t agreed individually?')) return;
-      try {
-        await put('/api/automations/order-permission', { mode, wording: mode === 'checkout' ? view.querySelector('[data-order-wording]').value : '', confirm: true });
-        toast(mode === 'checkout' ? 'Saved. Order updates go to everyone who orders.' : 'Saved. Order updates go only to customers who agreed.');
-        load();
-      } catch (err) {
-        toast(err.message);
       }
     });
   }

@@ -111,7 +111,7 @@ export function renderProfile(container, p, opts = {}) {
     : 'Not yet. Only opted-in customers get offers and campaigns.';
   const orderNote = p.orderUpdates
     ? p.orderUpdates.allowed
-      ? `Order updates on WhatsApp: yes (${escapeHtml(p.orderUpdates.basis === 'checkout' ? 'your checkout asks for it' : p.orderUpdates.basis)})`
+      ? `Order updates on WhatsApp: yes (${escapeHtml(p.orderUpdates.basis)})`
       : `Order updates on WhatsApp: no — ${escapeHtml(p.orderUpdates.reason)}`
     : '';
 

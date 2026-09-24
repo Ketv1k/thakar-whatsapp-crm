@@ -171,9 +171,6 @@ router.post('/order', asyncHandler(async (req, res) => {
     customerName: who.name,
     placedAt: since,
     simulated: true,
-    // "Agreed to WhatsApp order updates" on the Test page (kept on the test
-    // order only, so a real customer's record never changes).
-    testAgreed: req.body.agreed !== false,
     total,
     outstanding: isCod ? Math.max(0, total - 99) : 0,
     currency: 'INR',

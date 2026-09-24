@@ -18,10 +18,6 @@ const customerSchema = new mongoose.Schema(
     // Proof of how they agreed, and who recorded it (services/consent.js).
     optInEvidence: { type: String, default: '' },
     optInBy: { type: String, default: '' },
-    // Agreed to order updates on WhatsApp (e.g. ticked WhatsApp at checkout)
-    // without agreeing to offers.
-    orderUpdatesOptIn: { type: Boolean, default: false },
-    orderUpdatesEvidence: { type: String, default: '' },
     // Replied STOP ALL: no WhatsApp messages at all, order updates included.
     noWhatsApp: { type: Boolean, default: false },
     noWhatsAppAt: { type: Date, default: null },

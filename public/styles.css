@@ -827,8 +827,4 @@ a { color: var(--terracotta-text); }
 .od-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .danger-btn { color: var(--red); border-color: #EBC2B8; }
 .perm-h { margin: 10px 0 4px; font-size: 14px; }
-.perm-form { margin-top: 6px; font-size: 14px; }
-.perm-form summary { cursor: pointer; color: var(--terracotta-text); font-weight: 600; }
-.perm-form .field, .perm-form .check-line { margin-top: 8px; }
-.perm-form .btn { margin-top: 8px; }
 .optin-proof { font-size: 12px; color: var(--muted); }
