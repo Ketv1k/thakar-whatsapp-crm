@@ -67,3 +67,7 @@ services:
         value: claude-opus-5
       - key: AI_API_KEY
         sync: false
+      # Jev (TypeSafe AI) reads customer messages; optional. Key from
+      # console.typesafe.ai.
+      - key: TYPESAFE_API_KEY
+        sync: false

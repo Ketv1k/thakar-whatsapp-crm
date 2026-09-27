@@ -131,6 +131,7 @@ router.get('/', asyncHandler(async (req, res) => {
     testMode: process.env.TEST_MODE === 'true',
     metaReady: templates.metaReady(),
     ai: aiAnswer.status(),
+    jev: require('../services/jev').status(),
     quietHours: process.env.QUIET_HOURS || '21-9',
   });
 }));

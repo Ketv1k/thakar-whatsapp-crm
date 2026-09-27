@@ -200,11 +200,15 @@ function optInCard() {
 
 function aiCard() {
   const ai = data.ai || {};
+  const jev = data.jev || {};
   return `
     <article class="auto-card">
       <div class="auto-head"><span class="auto-icon">${ico('spark')}</span><h2>Instant replies & AI answers</h2></div>
       <p class="auto-desc">Always on. Order-status questions are answered from Shopify, problems become tickets, and everything else gets an answer from your website info or an instant acknowledgment.</p>
-      <div class="auto-toggles"><div class="auto-toggle"><span>AI answers</span><span class="pill ${ai.enabled ? 'pill-green' : ''}">${ai.enabled ? `On · ${escapeHtml(ai.model || ai.provider)}` : 'Off: add AI_API_KEY in Render'}</span></div></div>
+      <div class="auto-toggles"><div class="auto-toggle"><span>AI answers</span><span class="pill ${ai.enabled ? 'pill-green' : ''}">${ai.enabled ? `On · ${escapeHtml(ai.model || ai.provider)}` : 'Off'}</span></div>
+        <div class="auto-toggle"><span>Message reading (Jev)</span><span class="pill ${jev.enabled ? 'pill-green' : ''}">${jev.enabled ? 'On' : 'Off'}</span></div></div>
+      <p class="card-note">Jev reads messages the keyword rules don't recognise (Hinglish, Gujarati, long messages), spots order questions and problems, and marks upset customers so a person answers them.</p>
+      ${!ai.enabled || !jev.enabled ? `<p class="card-note">To turn on, add ${[!ai.enabled && '<b>AI_API_KEY</b> (AI answers)', !jev.enabled && '<b>TYPESAFE_API_KEY</b> (Jev)'].filter(Boolean).join(' and ')} in Render.</p>` : ''}
       <div class="auto-foot"><span class="muted">Replies inside the 24-hour window are free.</span>${state.config.testMode ? '<a href="#/test">Try it on the Test page</a>' : ''}</div>
     </article>`;
 }

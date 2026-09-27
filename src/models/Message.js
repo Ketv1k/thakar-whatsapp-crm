@@ -38,6 +38,12 @@ const messageSchema = new mongoose.Schema(
       type: new mongoose.Schema({ caption: String, preview: String, payload: String, attempts: Number }, { _id: false }),
       default: undefined,
     },
+    // What Jev made of an incoming message the keyword rules didn't
+    // recognise (services/jev.js).
+    jev: {
+      type: new mongoose.Schema({ kind: String, confidence: Number, issue: String, upset: Number, model: String }, { _id: false }),
+      default: undefined,
+    },
     // Who on the team sent it (replies and cart links).
     sentBy: {
       type: new mongoose.Schema({ id: String, name: String }, { _id: false }),

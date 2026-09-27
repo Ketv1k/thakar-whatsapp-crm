@@ -61,6 +61,18 @@ function showError(err) {
   el('test-result').innerHTML = `<div class="result error">${escapeHtml(err.message)}</div>`;
 }
 
+const JEV_KINDS = { order_status: 'asking about their order', problem: 'a problem', question: 'a question', bulk: 'a bulk order', praise: 'thanks or praise', other: 'something else' };
+const MOODS = ['calm', 'a little annoyed', 'angry or very upset'];
+
+// What Jev made of the message (only when the keyword rules didn't recognise it).
+function jevNote(j) {
+  if (!j) return '';
+  const what = JEV_KINDS[j.kind] || j.kind;
+  const issue = j.kind === 'problem' ? ` (${ISSUE_LABELS[j.issue] || j.issue})` : '';
+  const mood = MOODS[Math.min(2, Math.round(j.upset))];
+  return `<p class="card-note">Jev read this as ${escapeHtml(what + issue)}, ${Math.round(j.confidence * 100)}% sure. The customer sounds ${escapeHtml(mood)}.</p>`;
+}
+
 const OFF_NOTE = (what) => `Nothing was sent: switch on <b>${what}</b> in <a href="#/automations">Automations</a> first.`;
 const STOPPED_NOTE = 'No message: this customer replied STOP ALL, so they get no WhatsApp messages. If they reply START, they get them again.';
 const stopped = (r) => Object.values(r.results || {}).includes('stopped');
@@ -98,7 +110,7 @@ async function sendMessage(type) {
       acknowledged: 'Acknowledged automatically. It is waiting in your Inbox for you to reply.',
       chat: 'Added to your Inbox for you to reply.',
     }[r.outcome];
-    showResult(escapeHtml(outcome), r);
+    showResult(escapeHtml(outcome), r, jevNote(r.jev));
     if (type !== 'audio') el('test-text').value = '';
   });
 }

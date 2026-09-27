@@ -105,6 +105,8 @@ async function afterInbound(phone, since) {
   if (!conversation || !conversation.unread) return null;
   const fresh = await Message.findOne({ conversationId: conversation._id, direction: 'inbound', createdAt: { $gte: since } }).sort({ createdAt: -1 }).lean();
   if (!fresh) return null; // a repeat delivery of a message already handled
+  // Jev thought they sound angry: say so, so they're answered first.
+  const upset = fresh.jev && fresh.jev.upset >= require('./jev').UPSET_FROM ? 'Upset customer · ' : '';
   const who = await nameOf(phone);
   const url = `/#/inbox/${conversation._id}`;
   const cancel = await Order.findOne({ phone, 'cod.status': 'cancel_requested', 'cod.answeredAt': { $gte: since } }).select('name').lean();
@@ -113,9 +115,9 @@ async function afterInbound(phone, since) {
   }
   const ticket = conversation.activeTicketId ? await Ticket.findById(conversation.activeTicketId).lean() : null;
   if (ticket && ticket.createdAt >= since) {
-    return send({ title: `New ticket #${ticket.ticketNumber} · ${ISSUES[ticket.issueType] || ticket.issueType}`, body: `${who}: ${conversation.lastMessagePreview || ''}`, url, tag: `chat-${conversation._id}` });
+    return send({ title: `${upset}New ticket #${ticket.ticketNumber} · ${ISSUES[ticket.issueType] || ticket.issueType}`, body: `${who}: ${conversation.lastMessagePreview || ''}`, url, tag: `chat-${conversation._id}` });
   }
-  return send({ title: who, body: conversation.lastMessagePreview || 'New message', url, tag: `chat-${conversation._id}` });
+  return send({ title: `${upset}${who}`, body: conversation.lastMessagePreview || 'New message', url, tag: `chat-${conversation._id}` });
 }
 
 // Every few minutes: reminders that are now due, and (once each morning)

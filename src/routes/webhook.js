@@ -11,6 +11,7 @@ const triage = require('../services/ticketTriage');
 const autoAck = require('../services/autoAck');
 const pushNotify = require('../services/pushNotify');
 const aiAnswer = require('../services/aiAnswer');
+const jev = require('../services/jev');
 const cod = require('../services/cod');
 const optIn = require('../services/optIn');
 
@@ -180,22 +181,7 @@ async function handleSavedMessage({ inboundMessage, conversation, fromPhone, con
   }
 
   if (triage.isStatusOnlyQuery(text)) {
-    // Tier 1: auto-answer from Shopify, no ticket created.
-    try {
-      const orderInfo = await shopify.getLatestOrderStatusByPhone(fromPhone);
-      const replyText = shopify.composeStatusReplyText(orderInfo);
-      await outbound.sendText({ conversationId: conversation._id, to: fromPhone, body: replyText, autoAck: 'order_status' });
-      // Already answered - show the reply as the latest message and don't flag
-      // the chat as needing the founder.
-      conversation.lastMessagePreview = replyText.slice(0, 140);
-      conversation.unread = false;
-    } catch (err) {
-      console.error('[webhook] shopify status lookup failed', err.message);
-      // Fail safe: don't leave the customer hanging - fall through to a ticket
-      // so a human sees it instead of silently dropping the question.
-      await createTicketForConversation({ conversation, fromPhone, issueType: 'other' });
-    }
-    await conversation.save();
+    await answerOrderStatus(conversation, fromPhone);
     return;
   }
 
@@ -207,13 +193,48 @@ async function handleSavedMessage({ inboundMessage, conversation, fromPhone, con
     return;
   }
 
+  // The keywords didn't recognise it: Jev (if set up) reads it and may spot
+  // an order-status question or a problem worded in a way they miss.
+  const reading = await jev.readMessage(text);
+  const verdict = jev.decide(reading);
+  if (reading) await Message.updateOne({ _id: inboundMessage._id }, { $set: { jev: reading } });
+  if (verdict.action === 'status') {
+    await answerOrderStatus(conversation, fromPhone);
+    return;
+  }
+  if (verdict.action === 'ticket') {
+    await createTicketForConversation({ conversation, fromPhone, issueType: verdict.issueType });
+    await conversation.save();
+    return;
+  }
+
   // Tier 3: general message. If the shop's own information answers it, the AI
   // replies with the answer; otherwise an instant acknowledgment that fits what
-  // they said, and it waits in Chats for the founder.
+  // they said, and it waits in Chats for the founder. An upset customer gets
+  // the acknowledgment only: a person should answer them.
   await conversation.save();
   const category = autoAck.categorize('text', text);
-  if (await answerWithAi({ conversation, fromPhone, text, category, inboundMessage })) return;
+  if (!verdict.upset && (await answerWithAi({ conversation, fromPhone, text, category, inboundMessage }))) return;
   await sendAutoAckIfDue(conversation, fromPhone, category);
+}
+
+// Tier 1: an order-status question, answered from Shopify with no ticket.
+async function answerOrderStatus(conversation, fromPhone) {
+  try {
+    const orderInfo = await shopify.getLatestOrderStatusByPhone(fromPhone);
+    const replyText = shopify.composeStatusReplyText(orderInfo);
+    await outbound.sendText({ conversationId: conversation._id, to: fromPhone, body: replyText, autoAck: 'order_status' });
+    // Already answered - show the reply as the latest message and don't flag
+    // the chat as needing the founder.
+    conversation.lastMessagePreview = replyText.slice(0, 140);
+    conversation.unread = false;
+  } catch (err) {
+    console.error('[webhook] shopify status lookup failed', err.message);
+    // Fail safe: don't leave the customer hanging - fall through to a ticket
+    // so a human sees it instead of silently dropping the question.
+    await createTicketForConversation({ conversation, fromPhone, issueType: 'other' });
+  }
+  await conversation.save();
 }
 
 // Every few minutes: customer messages that were saved but never fully

@@ -101,6 +101,7 @@ router.post('/simulate', asyncHandler(async (req, res) => {
     ticketNumber: ticket?.ticketNumber || null,
     issueType: ticket?.issueType || null,
     replies: replies.map((r) => r.body),
+    jev: after ? ((await Message.findOne({ conversationId: after._id, direction: 'inbound', createdAt: { $gte: startedAt } }).select('jev').lean()) || {}).jev || null : null,
   });
 }));
 

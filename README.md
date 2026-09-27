@@ -185,8 +185,27 @@ gets about 200 back. Approximate cost per answer, prices as of September 2026:
 | Claude Opus 5 | `anthropic`, `claude-opus-5` | $5 / $25 | ≈ ₹2.50 |
 
 Customer messages are personal data: use a paid (billing-enabled) account, since free tiers may
-use prompts to improve the provider's models. Jev (TypeSafe) can't be used here - it classifies
-and scores but can't write text.
+use prompts to improve the provider's models.
+
+### Reading messages with Jev (optional)
+
+[Jev](https://typesafe.ai) (TypeSafe AI) doesn't write replies; it picks from fixed options, fast
+and cheaply. The app uses it on customer messages the keyword rules don't recognise (Hinglish,
+Gujarati, long or unusual wording) and asks it three things: what the customer wants (order
+status / a problem / a question / bulk order / thanks / other), what went wrong if it's a problem,
+and how upset they sound.
+
+- **Order question** (Jev at least 75% sure) → answered from Shopify, like "where is my order".
+- **Problem** (at least 75% sure) → a ticket of the right type (damaged, missing, late…).
+- **Upset customer** → no AI answer, just the acknowledgment, and the notification says
+  "Upset customer" so a person answers first.
+- Anything else, or if Jev is unsure or doesn't answer within a few seconds → handled exactly as
+  without Jev.
+
+To turn it on: create a key at [console.typesafe.ai](https://console.typesafe.ai) and add it in
+Render as `TYPESAFE_API_KEY` (Environment tab; never in chat or in this repo). Automations shows
+"Message reading (Jev): On", and the Test page says what Jev made of each test message. Cost:
+about 500 tokens per message at $0.042 per million, roughly ₹1 per 500 messages.
 
 ## Test mode (try it before WhatsApp is connected)
 
