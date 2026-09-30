@@ -26,11 +26,14 @@ const PHONE_RE = /^[0-9]{8,15}$/;
 // Real Shopify customers to pretend to be. Empty list if Shopify is unreachable,
 // so the founder can still type a number by hand.
 router.get('/customers', asyncHandler(async (req, res) => {
+  // First choice: the owner's own number, which gets real WhatsApp messages.
+  const mine = require('../services/whatsapp').testPhones()[0];
+  const me = mine ? [{ phone: mine, name: String(process.env.FOUNDER_NAME || 'Me').trim() || 'Me', ordersCount: 0, me: true }] : [];
   try {
-    res.json(await shopify.listRecentCustomersWithPhone(15));
+    res.json([...me, ...(await shopify.listRecentCustomersWithPhone(15)).filter((c) => c.phone !== mine)]);
   } catch (err) {
     console.error('[test mode] could not load Shopify customers', err.message);
-    res.json([]);
+    res.json(me);
   }
 }));
 

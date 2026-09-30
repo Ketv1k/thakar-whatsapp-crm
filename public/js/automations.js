@@ -173,12 +173,19 @@ function statusStrip() {
   const templatesLine = data.metaReady
     ? `${approved} of ${catalog.length} message templates approved by Meta. <button type="button" class="link-btn" data-refresh>Refresh</button> <button type="button" class="link-btn" data-submit-all>Submit all to Meta</button>${data.testMode ? ' (Test mode: customers get nothing.)' : ''}`
     : 'Add WHATSAPP_BUSINESS_ACCOUNT_ID and WHATSAPP_TOKEN in Render to submit templates and see their approval here.';
+  const inc = data.incoming;
+  const incomingLine = !inc
+    ? ''
+    : inc.connected
+    ? `<span class="pill pill-green">Customer messages come here</span> Meta sends your WhatsApp messages to this app${inc.others && inc.others.length ? ` (and to ${escapeHtml(inc.others.join(', '))})` : ''}.${data.testMode ? ' In test mode the app only replies to your own number.' : ''}`
+    : `<span class="pill pill-amber">Customer messages don't come here yet</span> ${inc.error ? escapeHtml(`Meta said: ${inc.error}`) : 'They still go only to your other WhatsApp tools (e.g. Zoko).'} <button type="button" class="link-btn" data-incoming>Receive them here too</button>`;
   return `
     <section class="status-strip">
       <div>${ico('chat')}<span>${whatsapp}</span></div>
       <div>${ico('box')}<span>${shopify}</span></div>
       ${liveLine ? `<div>${ico('bolt')}<span>${liveLine}</span></div>` : ''}
       <div>${ico('check')}<span>${templatesLine}</span></div>
+      ${incomingLine ? `<div>${ico('chat')}<span>${incomingLine}</span></div>` : ''}
       <div>${ico('clock')}<span>Offers and reminders are never sent at night (9pm to 9am).</span></div>
     </section>`;
 }
@@ -255,6 +262,20 @@ function render() {
       } catch (err) {
         toast(`Not saved: ${err.message}`);
       }
+    });
+  }
+  const incBtn = view.querySelector('[data-incoming]');
+  if (incBtn) {
+    incBtn.addEventListener('click', async () => {
+      if (!confirm('Ask Meta to send customer messages to this app too? Zoko keeps getting them as well.')) return;
+      incBtn.textContent = 'Connecting…';
+      try {
+        const r = await post('/api/automations/whatsapp-incoming');
+        toast(r && r.connected ? 'Customer messages now come to this app too' : 'Meta accepted it; check again in a minute');
+      } catch (err) {
+        toast(err.message);
+      }
+      load();
     });
   }
   const liveBtn = view.querySelector('[data-live]');

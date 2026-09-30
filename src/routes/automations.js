@@ -130,6 +130,7 @@ router.get('/', asyncHandler(async (req, res) => {
     whatsappConnected: !!process.env.WHATSAPP_TOKEN && process.env.TEST_MODE !== 'true',
     testMode: process.env.TEST_MODE === 'true',
     metaReady: templates.metaReady(),
+    incoming: await require('../services/metaIncoming').status(),
     ai: aiAnswer.status(),
     jev: require('../services/jev').status(),
     quietHours: process.env.QUIET_HOURS || '21-9',
@@ -157,6 +158,11 @@ router.post('/shopify-live', asyncHandler(async (req, res) => {
     return res.status(502).json({ error: `Shopify said: ${err.message}` });
   }
   res.json(await live.status());
+}));
+
+// Asks Meta to send the WhatsApp account's incoming messages to this app too.
+router.post('/whatsapp-incoming', asyncHandler(async (req, res) => {
+  res.json(await require('../services/metaIncoming').connect());
 }));
 
 router.put('/optin-shopify', asyncHandler(async (req, res) => {

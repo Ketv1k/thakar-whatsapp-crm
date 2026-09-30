@@ -284,7 +284,7 @@ export async function showTest() {
     <div class="test">
       <header class="home-head">
         <h1 class="page-title">Test</h1>
-        <p>Pretend to be a customer and see exactly what your inbox and automations do. ${escapeHtml(testSendNote())} To get real messages on your phone, choose "Someone else" and type your own number.</p>
+        <p>Pretend to be a customer and see exactly what your inbox and automations do. ${escapeHtml(testSendNote())} To get real messages on your phone, choose <b>Me</b> as the customer.</p>
       </header>
       <div class="field">
         <label for="test-customer">Customer</label>
@@ -373,7 +373,11 @@ export async function showTest() {
   const select = el('test-customer');
   select.innerHTML =
     testCustomers
-      .map((c, i) => `<option value="${i}">${escapeHtml(c.name || 'Customer')} · …${escapeHtml(c.phone.slice(-4))} · ${c.ordersCount} order${c.ordersCount === 1 ? '' : 's'}</option>`)
+      .map((c, i) =>
+        c.me
+          ? `<option value="${i}">Me · my own number …${escapeHtml(c.phone.slice(-4))} (gets real WhatsApp messages)</option>`
+          : `<option value="${i}">${escapeHtml(c.name || 'Customer')} · …${escapeHtml(c.phone.slice(-4))} · ${c.ordersCount} order${c.ordersCount === 1 ? '' : 's'}</option>`
+      )
       .join('') + '<option value="custom">Someone else (type a number)</option>';
   const sync = () => el('test-custom').classList.toggle('hidden', select.value !== 'custom');
   select.addEventListener('change', sync);

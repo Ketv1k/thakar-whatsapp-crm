@@ -82,3 +82,13 @@ test('test mode: only the owner\'s own number gets real WhatsApp messages', () =
     }
   }
 });
+
+test("whether customer messages reach this app (Meta's subscribed apps)", () => {
+  const { summarize } = require('../src/services/metaIncoming');
+  const app = { id: '1110858508152213', name: 'Thakar Kitchen CRM' };
+  const zoko = { whatsapp_business_api_data: { id: '999', name: 'Zoko' } };
+  const ours = { whatsapp_business_api_data: { id: '1110858508152213', name: 'Thakar Kitchen CRM' } };
+  assert.deepEqual(summarize(app, [zoko]), { connected: false, appName: 'Thakar Kitchen CRM', others: ['Zoko'] });
+  assert.deepEqual(summarize(app, [zoko, ours]), { connected: true, appName: 'Thakar Kitchen CRM', others: ['Zoko'] });
+  assert.equal(summarize(app, []).connected, false);
+});
