@@ -223,7 +223,11 @@ Set `TEST_MODE=true` and:
   can be repeated and never change real customers; "Your reminders and alerts" tries a due
   "Remind me", a birthday, an overdue ticket and a test notification;
 - **nothing is ever sent on WhatsApp**: every outgoing message is saved and logged
-  (`[test mode] not sent to …`) instead.
+  (`[test mode] not sent to …`) instead;
+- with `WHATSAPP_BUSINESS_ACCOUNT_ID` and `WHATSAPP_TOKEN` set, Automations still shows Meta's
+  approval of each message template (**Refresh**) and can submit them, so you can check the
+  connection before going live. **Submit all** first checks Meta, so templates already made in
+  WhatsApp Manager with the same names are not submitted twice.
 
 Turn it off (`TEST_MODE=false` or remove it) once WhatsApp is connected.
 

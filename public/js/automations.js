@@ -170,11 +170,9 @@ function statusStrip() {
     : `<span class="pill pill-amber">Instant updates off</span> ${escapeHtml(live.publicUrl ? (live.errors && live.errors[0]) || 'Not connected yet.' : 'They switch on by themselves once the app runs at its web address (on Render).')} ${live.publicUrl ? '<button type="button" class="link-btn" data-live>Connect now</button>' : ''}`;
   const catalog = Object.values(data.automations).map((a) => a.template).filter(Boolean);
   const approved = catalog.filter((t) => t.status === 'APPROVED').length;
-  const templatesLine = data.testMode
-    ? 'Message templates: submitted to Meta for approval once WhatsApp is connected.'
-    : data.metaReady
-    ? `${approved} of ${catalog.length} message templates approved by Meta. <button type="button" class="link-btn" data-refresh>Refresh</button> <button type="button" class="link-btn" data-submit-all>Submit all to Meta</button>`
-    : 'Add WHATSAPP_BUSINESS_ACCOUNT_ID in Render to submit templates and see their approval here.';
+  const templatesLine = data.metaReady
+    ? `${approved} of ${catalog.length} message templates approved by Meta. <button type="button" class="link-btn" data-refresh>Refresh</button> <button type="button" class="link-btn" data-submit-all>Submit all to Meta</button>${data.testMode ? ' (Test mode: nothing is sent to customers.)' : ''}`
+    : 'Add WHATSAPP_BUSINESS_ACCOUNT_ID and WHATSAPP_TOKEN in Render to submit templates and see their approval here.';
   return `
     <section class="status-strip">
       <div>${ico('chat')}<span>${whatsapp}</span></div>

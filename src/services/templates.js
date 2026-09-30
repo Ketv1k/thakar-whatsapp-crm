@@ -215,10 +215,11 @@ function testMode() {
   return process.env.TEST_MODE === 'true';
 }
 
-// Templates can be submitted and checked only with the WhatsApp Business
-// Account id, and never in test mode.
+// Templates can be submitted and checked with the WhatsApp Business Account
+// id and a token - in test mode too, since that sends nothing to customers
+// (whatsapp.js still logs every message instead of sending it).
 function metaReady() {
-  return !testMode() && !!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID && !!process.env.WHATSAPP_TOKEN;
+  return !!process.env.WHATSAPP_BUSINESS_ACCOUNT_ID && !!process.env.WHATSAPP_TOKEN;
 }
 
 function metaApi() {
@@ -277,7 +278,7 @@ async function refreshFromMeta() {
 
 async function submitToMeta(template) {
   if (!metaReady()) {
-    throw Object.assign(new Error('Connect WhatsApp first (and turn off test mode) to submit templates to Meta.'), {
+    throw Object.assign(new Error('Add WHATSAPP_BUSINESS_ACCOUNT_ID and WHATSAPP_TOKEN in Render to submit templates to Meta.'), {
       status: 409,
       expose: true,
     });
@@ -336,7 +337,7 @@ function canSend(t) {
 
 function statusLabel(t) {
   if (!t) return 'Missing';
-  if (testMode()) return 'Test mode';
+  if (testMode() && !metaReady()) return 'Test mode';
   const map = {
     not_submitted: 'Not submitted',
     PENDING: 'Waiting for Meta',

@@ -43,8 +43,10 @@ router.post('/:id/submit', asyncHandler(async (req, res) => {
   res.json(templates.summary(t));
 }));
 
-// Submits every built-in template that hasn't been submitted yet.
+// Submits every built-in template that hasn't been submitted yet. Meta is
+// checked first, so ones already made in WhatsApp Manager aren't sent again.
 router.post('/submit-all', asyncHandler(async (req, res) => {
+  await templates.refreshFromMeta();
   const pending = await Template.find({ source: 'catalog', status: { $in: ['not_submitted', 'REJECTED'] } });
   const results = [];
   for (const t of pending) {
