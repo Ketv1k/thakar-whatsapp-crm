@@ -1,6 +1,6 @@
 // Automations: the messages that go out by themselves, each with an on/off
 // switch, a preview, what it costs and how it's doing.
-import { state, api, post, patch, el, escapeHtml, ago, money, toast, ico, isCurrent, switchHtml, plural } from './core.js';
+import { state, api, post, patch, el, escapeHtml, ago, money, toast, ico, isCurrent, switchHtml, plural, testSendNote } from './core.js';
 
 let data = null;
 
@@ -153,7 +153,7 @@ function cardHtml(card) {
 
 function statusStrip() {
   const whatsapp = data.testMode
-    ? '<span class="pill pill-amber">Test mode</span> Messages show in chats but nothing is sent on WhatsApp.'
+    ? `<span class="pill pill-amber">Test mode</span> Messages show in chats. ${escapeHtml(testSendNote())}`
     : data.whatsappConnected
     ? '<span class="pill pill-green">WhatsApp connected</span>'
     : '<span class="pill pill-red">WhatsApp not connected</span>';
@@ -171,7 +171,7 @@ function statusStrip() {
   const catalog = Object.values(data.automations).map((a) => a.template).filter(Boolean);
   const approved = catalog.filter((t) => t.status === 'APPROVED').length;
   const templatesLine = data.metaReady
-    ? `${approved} of ${catalog.length} message templates approved by Meta. <button type="button" class="link-btn" data-refresh>Refresh</button> <button type="button" class="link-btn" data-submit-all>Submit all to Meta</button>${data.testMode ? ' (Test mode: nothing is sent to customers.)' : ''}`
+    ? `${approved} of ${catalog.length} message templates approved by Meta. <button type="button" class="link-btn" data-refresh>Refresh</button> <button type="button" class="link-btn" data-submit-all>Submit all to Meta</button>${data.testMode ? ' (Test mode: customers get nothing.)' : ''}`
     : 'Add WHATSAPP_BUSINESS_ACCOUNT_ID and WHATSAPP_TOKEN in Render to submit templates and see their approval here.';
   return `
     <section class="status-strip">

@@ -117,7 +117,7 @@ async function sendOne(campaign, template, customer) {
       buttons: templates.quickReplies(template).length ? templates.quickReplies(template) : undefined,
       status: 'queued',
       statusAt: new Date(),
-      test: whatsapp.testMode() ? true : undefined,
+      test: whatsapp.sendsFor(customer.phone) ? undefined : true,
     });
   } catch (err) {
     await undo();

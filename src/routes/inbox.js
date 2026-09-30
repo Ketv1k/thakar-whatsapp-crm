@@ -20,6 +20,8 @@ router.get('/config', (req, res) => {
   res.json({
     slaHours: Number(process.env.SLA_HOURS || 6),
     testMode: process.env.TEST_MODE === 'true',
+    // In test mode, the numbers (last 4 digits) that still get real messages.
+    testSendsTo: process.env.TEST_MODE === 'true' ? require('../services/whatsapp').testPhones().map((p) => p.slice(-4)) : [],
     founderName: String(process.env.FOUNDER_NAME || '').trim().slice(0, 40),
     ai: aiAnswer.status(),
     // Who is logged in on this device: { name, role: 'owner' | 'team' }.

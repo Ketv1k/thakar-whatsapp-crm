@@ -53,3 +53,32 @@ test('STOP ALL stops every message; STOP only offers', () => {
   assert.equal(detectKeyword('stop'), 'stop');
   assert.equal(detectKeyword('start'), 'start');
 });
+
+test('test mode: only the owner\'s own number gets real WhatsApp messages', () => {
+  const { sendsFor, testPhones } = require('../src/services/whatsapp');
+  const saved = { t: process.env.TEST_MODE, f: process.env.FOUNDER_PHONE, p: process.env.TEST_PHONES };
+  try {
+    delete process.env.TEST_PHONES;
+    process.env.FOUNDER_PHONE = '91 98765 43210';
+    process.env.TEST_MODE = 'true';
+    assert.deepEqual(testPhones(), ['919876543210']);
+    assert.equal(sendsFor('919876543210'), true);
+    assert.equal(sendsFor('+91 98765-43210'), true);
+    assert.equal(sendsFor('919800000001'), false);
+    assert.equal(sendsFor(''), false);
+    // TEST_PHONES, when set, replaces FOUNDER_PHONE (empty = nobody).
+    process.env.TEST_PHONES = '919800000001, 919800000002';
+    assert.equal(sendsFor('919800000002'), true);
+    assert.equal(sendsFor('919876543210'), false);
+    process.env.TEST_PHONES = '';
+    assert.equal(sendsFor('919876543210'), false);
+    // Live: everyone.
+    process.env.TEST_MODE = 'false';
+    assert.equal(sendsFor('919800000009'), true);
+  } finally {
+    for (const [k, v] of [['TEST_MODE', saved.t], ['FOUNDER_PHONE', saved.f], ['TEST_PHONES', saved.p]]) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});

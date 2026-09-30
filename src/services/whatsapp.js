@@ -32,6 +32,24 @@ function testMode() {
   return process.env.TEST_MODE === 'true';
 }
 
+// Numbers that get real WhatsApp messages even in test mode, so the owner can
+// try the real thing on their own phone: TEST_PHONES (comma-separated), or
+// FOUNDER_PHONE when that isn't set. Everyone else is only logged.
+function testPhones() {
+  const list = process.env.TEST_PHONES !== undefined ? process.env.TEST_PHONES : process.env.FOUNDER_PHONE || '';
+  return String(list)
+    .split(',')
+    .map((p) => p.replace(/\D/g, ''))
+    .filter((p) => p.length >= 10);
+}
+
+// Whether a message to this number really goes out on WhatsApp.
+function sendsFor(toPhone) {
+  if (!testMode()) return true;
+  const to = String(toPhone || '').replace(/\D/g, '');
+  return !!to && testPhones().includes(to);
+}
+
 function notSent(toPhone, what) {
   console.log(`[test mode] not sent to …${String(toPhone).slice(-4)}: ${what}`);
   // Unique per message: outgoing ids share a unique index with incoming ones.
@@ -42,7 +60,7 @@ function notSent(toPhone, what) {
 // i.e. after the customer has messaged you (which is true for everything in
 // this triage flow - replies, acknowledgments, SLA context).
 async function sendTextMessage(toPhone, body) {
-  if (testMode()) return notSent(toPhone, body);
+  if (!sendsFor(toPhone)) return notSent(toPhone, body);
   const api = client();
   const { data } = await api.post('/messages', {
     messaging_product: 'whatsapp',
@@ -57,7 +75,7 @@ async function sendTextMessage(toPhone, body) {
 // outside the 24h window - order/shipping updates, broadcasts, cart recovery.
 // `components` follows Meta's template component format (for {{1}} style variables).
 async function sendTemplateMessage(toPhone, templateName, languageCode = 'en', components = []) {
-  if (testMode()) return notSent(toPhone, `[template ${templateName}]`);
+  if (!sendsFor(toPhone)) return notSent(toPhone, `[template ${templateName}]`);
   const api = client();
   const { data } = await api.post('/messages', {
     messaging_product: 'whatsapp',
@@ -87,7 +105,8 @@ async function markMessageRead(waMessageId) {
 // then fetched with the same token. Returns { stream, mimeType, size }.
 // Media stays downloadable for about 30 days after it was sent.
 async function downloadMedia(mediaId, kind) {
-  if (testMode()) return testMedia(kind);
+  // Photos and voice notes from the Test page have made-up ids.
+  if (testMode() && (String(mediaId).startsWith('test-') || !process.env.WHATSAPP_TOKEN)) return testMedia(kind);
   const token = process.env.WHATSAPP_TOKEN;
   if (!token) throw new Error('WHATSAPP_TOKEN not configured');
   const headers = { Authorization: `Bearer ${token}` };
@@ -169,4 +188,4 @@ function describeError(err) {
   return `${e.code ? `(#${e.code}) ` : ''}${detail}`.slice(0, 300);
 }
 
-module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead, downloadMedia, describeError, isRetryable, testMode };
+module.exports = { sendTextMessage, sendTemplateMessage, markMessageRead, downloadMedia, describeError, isRetryable, testMode, testPhones, sendsFor };

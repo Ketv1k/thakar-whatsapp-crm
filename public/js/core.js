@@ -29,6 +29,14 @@ export function saveKey(key) {
 
 export const el = (id) => document.getElementById(id);
 
+// Test mode, in plain words: who (if anyone) really gets WhatsApp messages.
+export function testSendNote() {
+  const to = (state.config.testSendsTo || []).map((d) => `…${d}`);
+  return to.length
+    ? `Nothing is sent on WhatsApp, except to your own number (${to.join(', ')}), so you can try the real thing.`
+    : 'Nothing is sent on WhatsApp.';
+}
+
 // The owner can do everything; team members can't send campaigns, change
 // automations, import/download lists or manage the team.
 export function isOwner() {

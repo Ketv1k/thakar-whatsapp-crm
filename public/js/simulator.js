@@ -1,6 +1,7 @@
 // Test page (test mode only): pretend to be a customer, and try every
-// automation with pretend orders, carts and restocks. Nothing is sent.
-import { state, api, post, patch, el, escapeHtml, ISSUE_LABELS, isCurrent, isOwner } from './core.js';
+// automation with pretend orders, carts and restocks. Only the owner's own
+// number (FOUNDER_PHONE / TEST_PHONES) gets real WhatsApp messages.
+import { state, api, post, patch, el, escapeHtml, ISSUE_LABELS, isCurrent, isOwner, testSendNote } from './core.js';
 
 const TEST_SAMPLES = [
   ['Order status', 'Hi, where is my order?'],
@@ -283,7 +284,7 @@ export async function showTest() {
     <div class="test">
       <header class="home-head">
         <h1 class="page-title">Test</h1>
-        <p>Pretend to be a customer and see exactly what your inbox and automations do. Nothing is sent to anyone.</p>
+        <p>Pretend to be a customer and see exactly what your inbox and automations do. ${escapeHtml(testSendNote())} To get real messages on your phone, choose "Someone else" and type your own number.</p>
       </header>
       <div class="field">
         <label for="test-customer">Customer</label>

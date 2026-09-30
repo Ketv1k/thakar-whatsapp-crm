@@ -1,5 +1,5 @@
 // Home: today at a glance and who needs the founder first.
-import { state, api, el, escapeHtml, displayName, avatar, ago, money, ico, ISSUE_LABELS, setInboxCount, isCurrent, plural, shortDate, isOwner } from './core.js';
+import { state, api, el, escapeHtml, displayName, avatar, ago, money, ico, ISSUE_LABELS, setInboxCount, isCurrent, plural, shortDate, isOwner, testSendNote } from './core.js';
 import { setFilter } from './inbox.js';
 
 function greeting() {
@@ -150,7 +150,7 @@ export async function loadHome() {
           ${state.config.testMode ? `
           <section class="card">
             <h2>Try it out</h2>
-            <p class="card-note">Pretend to be a customer: send a message, place a test order, leave a cart. Nothing is sent on WhatsApp.</p>
+            <p class="card-note">Pretend to be a customer: send a message, place a test order, leave a cart. ${escapeHtml(testSendNote())}</p>
             <a class="btn btn-dark" href="#/test" style="margin-top:10px">Open Test</a>
           </section>` : ''}
         </div>

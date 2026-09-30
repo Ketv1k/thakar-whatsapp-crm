@@ -222,8 +222,11 @@ Set `TEST_MODE=true` and:
 - reminder tests (cart, reorder, back in stock) use a new made-up customer each time, so they
   can be repeated and never change real customers; "Your reminders and alerts" tries a due
   "Remind me", a birthday, an overdue ticket and a test notification;
-- **nothing is ever sent on WhatsApp**: every outgoing message is saved and logged
-  (`[test mode] not sent to …`) instead;
+- **customers never get anything**: every outgoing message is saved and logged
+  (`[test mode] not sent to …`) instead - except to your own number (`FOUNDER_PHONE`, or the
+  numbers in `TEST_PHONES`, comma-separated), which gets the real WhatsApp message once WhatsApp
+  is connected, so you can try it on your phone (choose "Someone else" on the Test page and type
+  your number);
 - with `WHATSAPP_BUSINESS_ACCOUNT_ID` and `WHATSAPP_TOKEN` set, Automations still shows Meta's
   approval of each message template (**Refresh**) and can submit them, so you can check the
   connection before going live. **Submit all** first checks Meta, so templates already made in

@@ -7,8 +7,9 @@ const Message = require('../models/Message');
 const whatsapp = require('./whatsapp');
 const templates = require('./templates');
 
-function testFlag() {
-  return whatsapp.testMode() ? true : undefined;
+// Marks messages that were only logged (test mode), not really sent.
+function testFlag(to) {
+  return whatsapp.sendsFor(to) ? undefined : true;
 }
 
 async function sendText({ conversationId, to, body, ticketId = null, autoAck = null, sentByFounder = false, extra = {} }) {
@@ -26,7 +27,7 @@ async function sendText({ conversationId, to, body, ticketId = null, autoAck = n
     waMessageId,
     status: 'sent',
     statusAt: new Date(),
-    test: testFlag(),
+    test: testFlag(to),
   });
 }
 
@@ -71,7 +72,7 @@ async function sendTemplate({ to, template, bodyParams = [], headerImageUrl = ''
     autoAck: kind,
     templateName: template.name,
     buttons: templates.quickReplies(template).length ? templates.quickReplies(template) : undefined,
-    test: testFlag(),
+    test: testFlag(to),
   };
   try {
     const result = await whatsapp.sendTemplateMessage(

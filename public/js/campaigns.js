@@ -1,6 +1,6 @@
 // Campaigns: send an approved message to a group of opted-in customers, now or
 // later, and see how it did.
-import { state, api, post, patch, del, el, escapeHtml, dateTime, shortDate, money, toast, ico, isCurrent, plural, SEGMENT_LABELS } from './core.js';
+import { state, api, post, patch, del, el, escapeHtml, dateTime, shortDate, money, toast, ico, isCurrent, plural, SEGMENT_LABELS, testSendNote } from './core.js';
 
 let templatesCache = null;
 let groupsCache = null;
@@ -409,7 +409,7 @@ function wireComposer() {
     await patch(`/api/campaigns/${c._id}`, { name: c.name, audience: c.audience, templateId: c.templateId, bodyParams: c.bodyParams, headerImageUrl: c.headerImageUrl || '' }).catch(() => {});
     try {
       const r = await post(`/api/campaigns/${c._id}/test`);
-      toast(state.config.testMode ? 'Test message saved to your own chat (test mode: not sent).' : 'Test sent to your WhatsApp.');
+      toast(state.config.testMode && !(state.config.testSendsTo || []).length ? 'Test message saved to your own chat (test mode: not sent).' : 'Test sent to your WhatsApp.');
       if (r.conversationId && confirm('Open the test message now?')) location.hash = `#/inbox/${r.conversationId}`;
     } catch (err) {
       toast(err.message);
@@ -523,7 +523,7 @@ function renderResults(res) {
         ${c.status === 'sending' ? '<button type="button" class="btn" data-cancel>Stop sending</button>' : ''}
       </header>
       ${c.lastError ? `<p class="warn">${escapeHtml(c.lastError)}</p>` : ''}
-      ${state.config.testMode ? '<p class="notice">Test mode: these messages were saved in chats but not actually sent, so there are no ticks or replies.</p>' : ''}
+      ${state.config.testMode ? '<p class="notice">Test mode: messages to customers were saved in chats but not actually sent, so there are no ticks or replies.</p>' : ''}
       <section class="kpis six">
         <div class="kpi"><span class="kpi-label">Sent</span><span class="kpi-value">${s.sent}</span><span class="kpi-sub">of ${c.counts.audience} in the group</span></div>
         <div class="kpi"><span class="kpi-label">Delivered</span><span class="kpi-value">${pct(s.delivered)}</span><span class="kpi-sub">${s.delivered} people</span></div>
