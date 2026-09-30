@@ -243,11 +243,13 @@ router.post('/cart', asyncHandler(async (req, res) => {
   await ensureCustomer(who, false);
   const automation = await automations.get('abandoned_cart');
   const createdAt = new Date(Date.now() - ((automation.options.delayMinutes || 60) + 1) * 60 * 1000);
+  // Sent for real to the owner's own phone, so give it a link that opens.
+  const real = require('../services/whatsapp').sendsFor(who.phone);
   const checkout = await AbandonedCheckout.create({
     shopifyId: `test:${crypto.randomUUID()}`,
     phone: who.phone,
     firstName: who.name.split(' ')[0] || '',
-    url: 'https://thakarkitchen.com/cart?magic_order_id=order_TEST',
+    url: real ? `${shopify.storeUrl()}/cart` : 'https://thakarkitchen.com/cart?magic_order_id=order_TEST',
     linkType: 'magic',
     whatsappConsent: req.body.optIn === true,
     dropOffStep: 'Contact and Address details entered',
@@ -264,7 +266,7 @@ router.post('/cart', asyncHandler(async (req, res) => {
 // An order shipped long enough ago for a reorder reminder.
 router.post('/reorder', asyncHandler(async (req, res) => {
   const who = readCustomer(req.body);
-  await ensureCustomer(who, req.body.optIn === true);
+  await ensureCustomer(who, false);
   const automation = await automations.get('reorder_reminder');
   const shipped = new Date(Date.now() - ((automation.options.days || 21) + 1) * 24 * 60 * 60 * 1000);
   testOrderNumber = testOrderNumber || (await Order.countDocuments({ simulated: true })) + 1;
@@ -283,7 +285,7 @@ router.post('/reorder', asyncHandler(async (req, res) => {
     notified: { confirmed: shipped, shipped },
   });
   const since = new Date();
-  const decision = await reorder.remind(order, automation, { ignoreQuietHours: true });
+  const decision = await reorder.remind(order, automation, { ignoreQuietHours: true, testOptIn: req.body.optIn === true });
   res.json({ decision, ...(await whatWasSent(who.phone, since)) });
 }));
 

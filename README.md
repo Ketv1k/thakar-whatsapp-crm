@@ -220,7 +220,9 @@ Set `TEST_MODE=true` and:
   customer *would* receive. Test photos and voice notes show a stand-in picture and a short tune.
   When a test customer writes back, your earlier replies get blue "read" ticks, as on WhatsApp;
 - reminder tests (cart, reorder, back in stock) use a new made-up customer each time, so they
-  can be repeated and never change real customers; "Your reminders and alerts" tries a due
+  can be repeated and never change real customers - or, with "Send them to my own phone" ticked,
+  go to your own number as real WhatsApp messages (test carts and orders aren't held back by your
+  other tests, and your own opt-in isn't changed); "Your reminders and alerts" tries a due
   "Remind me", a birthday, an overdue ticket and a test notification;
 - **customers never get anything**: every outgoing message is saved and logged
   (`[test mode] not sent to …`) instead - except to your own number (`FOUNDER_PHONE`, or the

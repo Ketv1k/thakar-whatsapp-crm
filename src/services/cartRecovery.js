@@ -168,12 +168,15 @@ async function remind(checkout, automation, { now = new Date(), ignoreQuietHours
       ? AbandonedCheckout.exists({ phone: checkout.phone, remindStatus: 'sent', remindedAt: { $gte: new Date(now.getTime() - 24 * HOUR) } })
       : null,
   ]);
+  // A Test page cart stands alone: the tester's other test orders and
+  // reminders don't count against it.
+  const test = !!checkout.simulated;
   const decision = decide(checkout, {
     automation,
     optedIn: !!(customer && customer.optedInMarketing),
     optedOut: !!(customer && customer.optedOutAt && !customer.optedInMarketing),
-    orderedSince: !!orderedSince,
-    recentReminder: !!recentReminder,
+    orderedSince: !test && !!orderedSince,
+    recentReminder: !test && !!recentReminder,
     now,
     ignoreQuietHours,
   });

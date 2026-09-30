@@ -203,8 +203,15 @@ function freshCustomer() {
 const AUTOMATION_KEYS = { cart: 'abandoned_cart', reorder: 'reorder_reminder', restock: 'back_in_stock' };
 const AUTOMATION_LABELS = { cart: 'Abandoned cart', reorder: 'Reorder reminders', restock: 'Back-in-stock alerts' };
 
+// The owner's own number, if they chose to get these on their phone.
+function reminderCustomer() {
+  const me = (testCustomers || []).find((c) => c.me);
+  const box = el('test-to-me');
+  return me && box && box.checked ? { phone: me.phone, name: me.name } : freshCustomer();
+}
+
 async function marketing(kind) {
-  const w = freshCustomer();
+  const w = reminderCustomer();
   const optIn = el('test-optin').checked;
   await busy(async () => {
     const r = await post(`/api/test/${kind}`, { ...w, optIn, product: el('test-product').value });
@@ -320,6 +327,7 @@ export async function showTest() {
       <section class="card test-card">
         <h2>Reminders to customers</h2>
         <p class="card-note">Each try uses a new made-up customer, so you can repeat them as often as you like and real customers aren't changed.</p>
+        ${(state.config.testSendsTo || []).length ? `<label class="inline"><input id="test-to-me" type="checkbox" checked /> Send them to my own phone (…${escapeHtml(state.config.testSendsTo[0])}) instead, as a real WhatsApp message</label>` : ''}
         <label class="inline"><input id="test-optin" type="checkbox" checked /> The customer said yes to WhatsApp messages (at checkout, or opted in to offers)</label>
         <div class="test-actions">
           <button type="button" class="btn" id="test-cart">They leave a cart</button>

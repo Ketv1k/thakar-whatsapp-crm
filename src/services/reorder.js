@@ -48,17 +48,20 @@ function productLabel(order) {
   return items.length === 1 ? items[0] : `${items[0]} and more`;
 }
 
-async function remind(order, automation, { now = new Date(), ignoreQuietHours = false } = {}) {
+async function remind(order, automation, { now = new Date(), ignoreQuietHours = false, testOptIn } = {}) {
   const [customer, newerOrder, recentReminder] = await Promise.all([
     Customer.findOne({ phone: order.phone }).select('optedInMarketing').lean(),
     Order.exists({ phone: order.phone, placedAt: { $gt: order.placedAt }, cancelledAt: null, _id: { $ne: order._id } }),
     Order.exists({ phone: order.phone, 'notified.reorder': { $gte: new Date(now.getTime() - MIN_GAP_DAYS * DAY) }, 'notifyNotes.reorder': 'Sent' }),
   ]);
+  // A Test page order stands alone, and the tester says whether the
+  // customer opted in (so a real customer's record is never changed).
+  const test = !!order.simulated;
   const decision = decide(order, {
     automation,
-    optedIn: !!(customer && customer.optedInMarketing),
-    newerOrder: !!newerOrder,
-    recentReminder: !!recentReminder,
+    optedIn: test && testOptIn !== undefined ? !!testOptIn : !!(customer && customer.optedInMarketing),
+    newerOrder: !test && !!newerOrder,
+    recentReminder: !test && !!recentReminder,
     now,
     ignoreQuietHours,
   });
