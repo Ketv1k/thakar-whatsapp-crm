@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Thakar Kitchen features</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,500;1,600;1,700&family=Work+Sans:wght@400;500;600;700&display=block" rel="stylesheet">
+<style>
+  /* Colours from public/styles.css */
+  :root {
+    --cream: #FBF1DD; --paper: #FFFAF1; --sand: #F3E3C4; --ink: #1B0F08; --ink-2: #3A2A1E;
+    --muted: #6E5B4A; --line: #E8D9BE; --saffron: #F2B829; --terracotta: #C8501E;
+    --terracotta-text: #A63F14; --green: #1E6B3C; --green-bg: #DCF1E2; --red: #B42318;
+    --red-bg: #FBE3DF; --amber: #6E4A00; --amber-bg: #FDEBB8; --clay: #8F3510; --clay-bg: #F9DCC4;
+    --bubble-out: #FDE9C9; --chat-bg: #F3E3C4; --tick-blue: #2F6FAE;
+    --serif: 'Playfair Display', Georgia, serif;
+    --sans: 'Work Sans', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--cream); }
+  body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  #stage { position: absolute; inset: 0; overflow: hidden;
+    background: radial-gradient(1100px 1300px at 50% 55%, #FFF8EA 0%, var(--cream) 60%, #F6E6C8 100%); }
+  .abs { position: absolute; will-change: transform, opacity; }
+
+  /* Intro and captions */
+  #intro { left: 0; right: 0; top: 520px; text-align: center; }
+  .word { display: block; font-family: var(--serif); font-style: italic; font-weight: 600;
+    font-size: 150px; line-height: 1.12; letter-spacing: -2px; }
+  #allOnYou { color: var(--terracotta); font-weight: 700; margin-top: 40px; }
+  .caption { left: 50px; right: 50px; top: 104px; text-align: center; font-family: var(--serif);
+    font-style: italic; font-weight: 600; font-size: 72px; line-height: 1.1; letter-spacing: -1px; opacity: 0; }
+  .caption em { color: var(--terracotta); }
+
+  /* Phone */
+  #phone { left: 150px; top: 330px; width: 780px; height: 1560px; border-radius: 112px;
+    background: #120A05; padding: 20px; transform-origin: 50% 42%; opacity: 0;
+    box-shadow: 0 60px 120px rgba(80, 40, 10, .28), 0 0 0 3px #3A2A1E inset; }
+  #screen { position: relative; width: 100%; height: 100%; border-radius: 92px; overflow: hidden; background: var(--paper); }
+  .status { position: absolute; top: 0; left: 0; right: 0; height: 90px; display: flex; z-index: 20;
+    align-items: center; justify-content: space-between; padding: 22px 70px 0; font-weight: 600; font-size: 30px; }
+  .island { position: absolute; top: 22px; left: 50%; width: 220px; height: 62px; margin-left: -110px;
+    background: #120A05; border-radius: 40px; z-index: 21; }
+  .status-icons { display: flex; gap: 12px; align-items: center; }
+
+  /* Screens */
+  .scr { position: absolute; inset: 0; background: var(--paper); overflow: hidden; opacity: 0; }
+  .scr .dim { position: absolute; inset: 0; background: #1B0F08; opacity: 0; pointer-events: none; z-index: 30; }
+  .page { position: absolute; top: 104px; left: 40px; right: 40px; }
+  .page-title { font-family: var(--serif); font-weight: 700; font-size: 62px; letter-spacing: -1px; }
+  .sub { font-size: 25px; color: var(--muted); margin-top: 6px; }
+
+  /* Tab bar (public/index.html) */
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: var(--paper);
+    border-top: 2px solid var(--line); display: flex; justify-content: space-around; padding: 18px 20px 0; z-index: 10; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 21px; font-weight: 500;
+    color: #A8957F; width: 130px; position: relative; }
+  .tab.on { color: var(--ink); font-weight: 600; }
+  .tab svg { width: 40px; height: 40px; }
+  .tab .badge { position: absolute; top: -6px; left: 76px; min-width: 32px; height: 32px; border-radius: 16px;
+    background: var(--terracotta); color: #fff; font-size: 19px; font-weight: 700; display: grid; place-items: center; padding: 0 8px; }
+
+  /* Cards and pills */
+  .card { background: #fff; border: 2px solid var(--line); border-radius: 30px; padding: 26px 28px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; font-size: 21px; font-weight: 600;
+    padding: 6px 15px; border-radius: 999px; white-space: nowrap; }
+  .pill-green { background: var(--green-bg); color: var(--green); }
+  .pill-amber { background: var(--amber-bg); color: var(--amber); }
+  .pill-clay { background: var(--clay-bg); color: var(--clay); }
+  .pill-red { background: var(--red-bg); color: var(--red); }
+  .pill-jev { background: var(--terracotta); color: #fff; }
+  .pill-ink { background: var(--ink); color: var(--paper); }
+  .pill-line { border: 2px solid var(--line); color: var(--ink-2); background: #fff; }
+
+  /* Home */
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 34px; }
+  .kpi { background: #fff; border: 2px solid var(--line); border-radius: 28px; padding: 22px 24px; }
+  .kpi.hero { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+  .kpi-label { font-size: 23px; font-weight: 500; color: var(--muted); }
+  .kpi.hero .kpi-label, .kpi.hero .kpi-sub { color: #D9C7AE; }
+  .kpi-value { font-family: var(--serif); font-weight: 700; font-size: 70px; line-height: 1.05; margin-top: 4px; }
+  .kpi.hero .kpi-value { color: var(--saffron); }
+  .kpi-sub { font-size: 21px; color: var(--muted); }
+  .done-card { margin-top: 26px; }
+  .done-card h2, .card h2 { font-family: var(--serif); font-weight: 700; font-size: 34px; margin-bottom: 14px; }
+  .done-row { display: flex; gap: 16px; align-items: center; font-size: 25px; padding: 10px 0; color: var(--ink-2); }
+  .check { flex: none; width: 38px; height: 38px; border-radius: 19px; background: var(--green-bg); color: var(--green);
+    display: grid; place-items: center; font-weight: 700; font-size: 22px; }
+
+  /* Inbox */
+  .needs { display: flex; align-items: center; gap: 12px; font-size: 25px; font-weight: 600;
+    padding: 10px 20px; border-radius: 999px; background: var(--clay-bg); color: var(--clay); }
+  .needs b { display: inline-block; min-width: 38px; height: 38px; line-height: 38px; text-align: center;
+    border-radius: 19px; background: var(--terracotta); color: #fff; font-size: 22px; }
+  .title-row { display: flex; align-items: center; justify-content: space-between; }
+  .filters { display: flex; gap: 12px; margin-top: 20px; }
+  .filters span { font-size: 24px; font-weight: 500; padding: 9px 22px; border-radius: 999px; border: 2px solid var(--line); color: var(--muted); }
+  .filters span.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .ilist { position: absolute; top: 300px; left: 0; right: 0; bottom: 150px; }
+  .irow { position: absolute; left: 24px; right: 24px; height: 142px; padding: 0 22px; border-radius: 28px;
+    display: flex; align-items: center; gap: 20px; }
+  .irow.urgent { background: var(--red-bg); }
+  .avatar { flex: none; width: 84px; height: 84px; border-radius: 42px; display: grid; place-items: center;
+    font-weight: 600; font-size: 29px; color: var(--ink-2); background: var(--sand); }
+  .irow-main { flex: 1; min-width: 0; }
+  .irow-main strong { font-size: 30px; font-weight: 600; }
+  .irow-msg { font-size: 26px; color: var(--ink-2); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .irow-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; width: 210px; }
+  .irow-side time { font-size: 22px; color: var(--muted); }
+  .irow-side .slot { position: relative; height: 36px; width: 100%; }
+  .irow-side .slot > * { position: absolute; right: 0; top: 0; }
+  .dot { width: 22px; height: 22px; border-radius: 11px; background: var(--terracotta); margin-top: 7px; }
+
+  /* Chat */
+  .chat-head { position: absolute; top: 90px; left: 0; right: 0; height: 120px; display: flex; align-items: center;
+    gap: 18px; padding: 0 30px; border-bottom: 2px solid var(--line); background: var(--paper); z-index: 5; }
+  .chev { font-size: 50px; color: var(--terracotta); font-weight: 400; margin-right: 4px; line-height: 1; }
+  .chat-head .avatar { width: 72px; height: 72px; font-size: 25px; }
+  .chat-head strong { display: block; font-size: 30px; }
+  .chat-head small { font-size: 21px; color: var(--muted); }
+  .chat-body { position: absolute; top: 210px; left: 0; right: 0; bottom: 120px; background: var(--chat-bg);
+    padding: 26px 26px; display: flex; flex-direction: column; gap: 16px; }
+  .composer { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; background: var(--paper);
+    border-top: 2px solid var(--line); display: flex; align-items: center; gap: 16px; padding: 0 28px 20px; }
+  .composer .field { flex: 1; height: 66px; border-radius: 33px; border: 2px solid var(--line); background: #fff;
+    font-size: 25px; color: #A8957F; display: flex; align-items: center; padding: 0 26px; }
+  .composer .send { width: 66px; height: 66px; border-radius: 33px; background: var(--terracotta); }
+  .daychip { align-self: center; font-size: 21px; font-weight: 600; color: var(--muted); background: rgba(255,250,241,.8);
+    padding: 7px 18px; border-radius: 12px; }
+  .b { max-width: 540px; font-size: 26px; line-height: 1.32; padding: 14px 20px 12px; border-radius: 26px;
+    box-shadow: 0 2px 0 rgba(120, 80, 30, .08); }
+  .b.in { align-self: flex-start; background: #fff; border-top-left-radius: 8px; }
+  .b.out { align-self: flex-end; background: var(--bubble-out); border-top-right-radius: 8px; }
+  .meta { display: block; text-align: right; font-size: 18px; color: var(--muted); margin-top: 4px; }
+  .meta .tk { color: var(--tick-blue); font-weight: 700; margin-left: 4px; }
+  .tag-out { align-self: flex-end; margin-top: -6px; }
+  .tag-in { align-self: flex-start; margin-top: -6px; }
+  .tpl { display: block; font-size: 19px; font-weight: 600; color: var(--terracotta-text); letter-spacing: .5px;
+    text-transform: uppercase; margin-bottom: 4px; }
+  .link { color: var(--terracotta-text); font-weight: 600; }
+  .ordercard { background: #fff; border-radius: 18px; padding: 16px 18px; margin: 4px 0 6px; width: 460px; }
+  .ordercard strong { font-size: 26px; }
+  .track { display: flex; align-items: center; margin: 14px 0 8px; }
+  .track i { width: 22px; height: 22px; border-radius: 11px; background: var(--green); flex: none; }
+  .track i.off { background: #fff; border: 3px solid var(--line); }
+  .track u { flex: 1; height: 5px; background: var(--green); text-decoration: none; }
+  .track u.off { background: var(--line); }
+  .track-l { display: flex; justify-content: space-between; font-size: 19px; color: var(--muted); }
+  .btn-row { border-top: 2px solid rgba(120, 80, 30, .14); margin-top: 10px; padding-top: 12px; text-align: center;
+    color: var(--tick-blue); font-weight: 600; font-size: 25px; }
+  .qr { align-self: flex-end; width: 540px; display: flex; flex-direction: column; gap: 8px; margin-top: -8px; }
+  .qr div { background: var(--bubble-out); border-radius: 18px; text-align: center; padding: 14px; font-size: 25px;
+    font-weight: 600; color: var(--tick-blue); }
+  .sys { align-self: center; text-align: center; }
+  .jevstrip { position: relative; align-self: center; display: flex; align-items: center; gap: 10px; font-size: 23px;
+    font-weight: 700; color: #fff; background: var(--terracotta); padding: 10px 22px; border-radius: 999px; }
+  .ring { position: absolute; inset: -4px; border-radius: 999px; border: 4px solid var(--terracotta); }
+  .photo { align-self: flex-start; background: #fff; border-radius: 26px; padding: 10px; border-top-left-radius: 8px; }
+  .placed { align-self: center; background: #fff; border: 2px solid var(--line); border-radius: 26px; padding: 18px 28px;
+    display: flex; gap: 18px; align-items: center; font-size: 26px; font-weight: 600; }
+
+  /* Ticket sheet */
+  .backdrop { position: absolute; inset: 0; background: #1B0F08; opacity: 0; z-index: 40; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--paper); border-radius: 44px 44px 0 0;
+    padding: 20px 40px 60px; z-index: 41; transform: translateY(110%); }
+  .grab { width: 90px; height: 10px; border-radius: 5px; background: var(--line); margin: 0 auto 26px; }
+  .sheet h3 { font-family: var(--serif); font-weight: 700; font-size: 50px; }
+  .sheet .pills { display: flex; gap: 10px; margin: 16px 0 22px; flex-wrap: wrap; }
+  .sheet .line { font-size: 25px; color: var(--ink-2); padding: 12px 0; border-top: 2px solid var(--line); display: flex; gap: 14px; }
+  .sheet .btns { display: flex; gap: 16px; margin-top: 22px; }
+  .sheet .btns div { flex: 1; text-align: center; padding: 22px; border-radius: 22px; font-size: 27px; font-weight: 600; }
+
+  /* Notification */
+  #notif { left: 26px; right: 26px; top: 104px; padding: 22px 24px; border-radius: 40px; z-index: 50;
+    background: rgba(255, 250, 241, .97); box-shadow: 0 24px 60px rgba(40, 20, 5, .3); display: flex; gap: 18px; opacity: 0; }
+  .app-ico { flex: none; width: 74px; height: 74px; border-radius: 18px; background: var(--ink); display: grid; place-items: center;
+    font-family: var(--serif); font-style: italic; font-weight: 700; color: var(--saffron); font-size: 34px; }
+  .notif-head { display: flex; justify-content: space-between; font-size: 22px; color: var(--muted); }
+  .notif-title { font-size: 27px; font-weight: 700; margin-top: 3px; }
+  .notif-body { font-size: 25px; line-height: 1.3; margin-top: 3px; color: var(--ink-2); }
+
+  /* Customers */
+  .search { margin-top: 22px; height: 70px; border-radius: 35px; background: #fff; border: 2px solid var(--line);
+    font-size: 25px; color: #A8957F; display: flex; align-items: center; padding: 0 28px; }
+  .stages { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+  .stage { font-size: 24px; font-weight: 500; padding: 11px 20px; border-radius: 999px; background: #fff;
+    border: 2px solid var(--line); color: var(--ink-2); position: relative; }
+  .stage b { font-weight: 700; margin-left: 6px; }
+  .stage .on { position: absolute; inset: -2px; border-radius: 999px; background: var(--ink); color: var(--paper);
+    padding: 11px 20px; font-weight: 600; }
+  .clist { position: absolute; top: 560px; left: 40px; right: 40px; }
+  .clist h4 { font-size: 23px; font-weight: 600; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 10px; }
+  .crow { display: flex; align-items: center; gap: 18px; padding: 16px 0; border-bottom: 2px solid var(--line); }
+  .crow .avatar { width: 74px; height: 74px; font-size: 25px; }
+  .crow strong { font-size: 28px; display: block; }
+  .crow small { font-size: 22px; color: var(--muted); }
+  .crow .amt { margin-left: auto; text-align: right; font-weight: 700; font-size: 27px; }
+  .crow .amt small { display: block; font-weight: 500; }
+
+  /* Profile */
+  .prof-head { position: absolute; top: 90px; left: 0; right: 0; height: 100px; display: flex; align-items: center; padding: 0 30px; }
+  .prof { position: absolute; top: 190px; left: 40px; right: 40px; }
+  .prof-top { display: flex; gap: 24px; align-items: center; }
+  .prof-top .avatar { width: 120px; height: 120px; border-radius: 60px; font-size: 40px; background: var(--saffron); color: var(--ink); }
+  .prof-top h2 { font-family: var(--serif); font-weight: 700; font-size: 52px; }
+  .prof-pills { display: flex; gap: 10px; margin-top: 8px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 28px; }
+  .stat { background: #fff; border: 2px solid var(--line); border-radius: 24px; padding: 18px; text-align: center; }
+  .stat b { display: block; font-family: var(--serif); font-size: 46px; }
+  .stat span { font-size: 21px; color: var(--muted); }
+  .sec { margin-top: 26px; }
+  .sec h3 { font-size: 22px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .tl { display: flex; gap: 16px; font-size: 24px; color: var(--ink-2); padding: 8px 0; align-items: baseline; }
+  .tl i { flex: none; width: 16px; height: 16px; border-radius: 8px; background: var(--saffron); margin-top: 6px; }
+  .tl small { margin-left: auto; color: var(--muted); font-size: 20px; white-space: nowrap; }
+  .tags { display: flex; gap: 10px; flex-wrap: wrap; }
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; font-size: 25px; padding: 12px 0; }
+  .toggle { width: 84px; height: 48px; border-radius: 24px; background: var(--line); position: relative; flex: none; }
+  .toggle .fill { position: absolute; inset: 0; border-radius: 24px; background: var(--green); }
+  .toggle .knob { position: absolute; top: 5px; left: 5px; width: 38px; height: 38px; border-radius: 19px; background: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+
+  /* Campaigns */
+  .camp { margin-top: 26px; }
+  .camp-name { font-family: var(--serif); font-weight: 700; font-size: 40px; }
+  .ckpis { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 18px; }
+  .ckpi { background: var(--paper); border-radius: 20px; padding: 14px 16px; }
+  .ckpi .kpi-label { font-size: 20px; }
+  .ckpi .kpi-value { font-size: 46px; }
+  .ckpi .kpi-sub { font-size: 18px; }
+  .ckpi.win { grid-column: span 3; background: var(--green-bg); display: flex; align-items: baseline; gap: 18px; }
+  .ckpi.win .kpi-value { color: var(--green); font-size: 60px; }
+  .ckpi.win .kpi-label, .ckpi.win .kpi-sub { color: var(--green); }
+  .money { margin-top: 16px; font-size: 23px; color: var(--muted); }
+  .bar { height: 18px; border-radius: 9px; background: var(--line); margin-top: 10px; overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; background: var(--green); }
+
+  /* Taps */
+  #tap { width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 55px; background: rgba(27, 15, 8, .22);
+    border: 3px solid rgba(255, 250, 241, .9); z-index: 100; opacity: 0; }
+
+  /* End card */
+  #end { left: 0; right: 0; top: 560px; text-align: center; opacity: 0; }
+  #endLogo { width: 210px; height: 210px; border-radius: 50px; background: var(--ink); margin: 0 auto; display: grid;
+    place-items: center; font-family: var(--serif); font-style: italic; font-weight: 700; color: var(--saffron);
+    font-size: 108px; box-shadow: 0 30px 70px rgba(80, 40, 10, .25); }
+  #endLine { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 104px; line-height: 1.08;
+    letter-spacing: -2px; margin-top: 80px; }
+  #endBrand { margin-top: 60px; font-size: 34px; font-weight: 600; letter-spacing: 12px; }
+  #endChips { margin: 60px auto 0; width: 900px; display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
+  #endChips span { font-size: 30px; font-weight: 600; padding: 14px 28px; border-radius: 999px; background: #fff;
+    border: 2px solid var(--line); color: var(--ink-2); }
+  #endChips span.hl { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div id="intro" class="abs">
+    <span class="word" id="w0">Orders.</span>
+    <span class="word" id="w1">Packing.</span>
+    <span class="word" id="w2">Ads.</span>
+    <span class="word" id="w3">Support.</span>
+    <span class="word" id="allOnYou">All on you.</span>
+  </div>
+
+  <div class="caption abs" id="c0">Wake up to it<br><em>already handled.</em></div>
+  <div class="caption abs" id="c1">“Where’s my order?”<br><em>Answered in the chat.</em></div>
+  <div class="caption abs" id="c2">Product questions?<br><em>Answered by AI.</em></div>
+  <div class="caption abs" id="c3">The angry one?<br><em>Jev flags it. Ticket opens.</em></div>
+  <div class="caption abs" id="c4">Order updates &amp; COD.<br><em>Automatic.</em></div>
+  <div class="caption abs" id="c5">Abandoned carts?<br><em>Brought back.</em></div>
+  <div class="caption abs" id="c6">Every customer,<br><em>known by heart.</em></div>
+  <div class="caption abs" id="c7">Campaigns that<br><em>pay for themselves.</em></div>
+
+  <div id="phone" class="abs">
+    <div id="screen">
+      <div class="island"></div>
+      <div class="status">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="34" height="22" viewBox="0 0 34 22"><rect x="0" y="14" width="6" height="8" rx="2" fill="#1B0F08"/><rect x="9" y="10" width="6" height="12" rx="2" fill="#1B0F08"/><rect x="18" y="5" width="6" height="17" rx="2" fill="#1B0F08"/><rect x="27" y="0" width="6" height="22" rx="2" fill="#1B0F08"/></svg>
+          <svg width="50" height="24" viewBox="0 0 50 24"><rect x="1" y="1" width="42" height="22" rx="7" fill="none" stroke="#1B0F08" stroke-width="2" opacity=".5"/><rect x="5" y="5" width="30" height="14" rx="4" fill="#1B0F08"/><rect x="45" y="8" width="4" height="8" rx="2" fill="#1B0F08" opacity=".5"/></svg>
+        </span>
+      </div>
+
+      <!-- Home -->
+      <section class="scr" id="s-home">
+        <div class="page">
+          <div class="page-title">Good morning, Ketvik</div>
+          <div class="sub">Wednesday · Thakar Kitchen</div>
+          <div class="kpis">
+            <div class="kpi hero" id="k-ans"><div class="kpi-label">Answered for you</div><div class="kpi-value" data-count="38">0</div><div class="kpi-sub">24 AI · 14 order status</div></div>
+            <div class="kpi" id="k-wait"><div class="kpi-label">Chats waiting</div><div class="kpi-value" data-count="2">0</div><div class="kpi-sub">oldest 12 min</div></div>
+            <div class="kpi" id="k-tix"><div class="kpi-label">Open tickets</div><div class="kpi-value" data-count="1">0</div><div class="kpi-sub">none overdue</div></div>
+            <div class="kpi" id="k-cod"><div class="kpi-label">COD to confirm</div><div class="kpi-value" data-count="3">0</div><div class="kpi-sub">₹3,420 to collect</div></div>
+          </div>
+          <div class="card done-card">
+            <h2>Done for you today</h2>
+            <div class="done-row" id="d0"><span class="check">✓</span>14 “where’s my order?” answered</div>
+            <div class="done-row" id="d1"><span class="check">✓</span>24 questions answered by AI</div>
+            <div class="done-row" id="d2"><span class="check">✓</span>9 order updates sent</div>
+            <div class="done-row" id="d3"><span class="check">✓</span>2 carts recovered · ₹1,396</div>
+          </div>
+        </div>
+        <div class="tabbar" data-tab="home"></div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Inbox -->
+      <section class="scr" id="s-inbox">
+        <div class="page">
+          <div class="title-row"><div class="page-title">Inbox</div><span class="needs">Needs reply <b id="needsCount">2</b></span></div>
+          <div class="filters"><span class="on">All</span><span>Needs reply</span><span>Tickets</span></div>
+        </div>
+        <div class="ilist" id="ilist"></div>
+        <div class="tabbar" data-tab="inbox"></div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Chat: where's my order -->
+      <section class="scr" id="s-ankit">
+        <div class="chat-head"><span class="chev">‹</span><div class="avatar">AM</div><div><strong>Ankit M.</strong><small>WhatsApp · Mumbai</small></div></div>
+        <div class="chat-body">
+          <div class="daychip">Today</div>
+          <div class="b in" id="a1">Where is my order #2291?<span class="meta">9:38</span></div>
+          <div class="b out" id="a2">
+            <div class="ordercard">
+              <strong>Order #2291</strong> <span class="pill pill-green" style="margin-left:8px">Shipped</span>
+              <div class="track"><i></i><u></u><i></i><u class="off"></u><i class="off"></i></div>
+              <div class="track-l"><span>Confirmed</span><span>Shipped</span><span>Delivered</span></div>
+              <div style="font-size:24px;margin-top:10px">Delhivery · arriving <b>Thursday</b></div>
+            </div>
+            <div class="btn-row">Track order →</div>
+            <span class="meta">9:38<span class="tk">✓✓</span></span>
+          </div>
+          <span class="pill pill-green tag-out" id="a3">✓ Auto-answered from Shopify</span>
+        </div>
+        <div class="composer"><div class="field">Message</div><div class="send"></div></div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Chat: FAQ -->
+      <section class="scr" id="s-priya">
+        <div class="chat-head"><span class="chev">‹</span><div class="avatar">PK</div><div><strong>Priya K.</strong><small>WhatsApp · Delhi</small></div></div>
+        <div class="chat-body">
+          <div class="daychip">Today</div>
+          <div class="b in" id="p1">Dal ko fridge mein rakhna padega?<span class="meta">9:39</span></div>
+          <div class="b out" id="p2">Nahi, fridge ki zarurat nahi! Pouch 12 mahine tak shelf pe fresh rehta hai. Bas 3–4 minute garam karein aur enjoy karein.<span class="meta">9:39<span class="tk">✓✓</span></span></div>
+          <span class="pill pill-amber tag-out" id="p3">✓ AI answer · from your shop info</span>
+          <div class="b in" id="p4">Wah, perfect! 2 order kar rahi hoon<span class="meta">9:40</span></div>
+        </div>
+        <div class="composer"><div class="field">Message</div><div class="send"></div></div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Chat: Jev + ticket -->
+      <section class="scr" id="s-riya">
+        <div class="chat-head"><span class="chev">‹</span><div class="avatar" style="background:#F6C9C0">RS</div><div><strong>Riya S.</strong><small>WhatsApp · Ahmedabad</small></div></div>
+        <div class="chat-body">
+          <div class="daychip">Today</div>
+          <div class="b in" id="r1">Packet phata hua aaya, sab leak ho gaya!!<span class="meta">9:41</span></div>
+          <div class="jevstrip" id="r2"><span class="ring" id="r2ring"></span>Jev · Urgent · Angry · Damaged</div>
+          <div class="b out" id="r3"><span class="tpl">Instant reply</span>Thanks for letting us know — we’ve logged this as ticket #1042. If you can, please reply with a photo of the item.<span class="meta">9:41<span class="tk">✓✓</span></span></div>
+          <div class="photo" id="r4">
+            <svg width="300" height="210" viewBox="0 0 300 210">
+              <rect width="300" height="210" rx="18" fill="#E9D7B8"/>
+              <ellipse cx="190" cy="178" rx="96" ry="22" fill="#9A4A1C" opacity=".55"/>
+              <path d="M70 30 h150 v120 l-14 -10 -12 14 -14 -12 -12 16 -14 -12 -12 14 -14 -14 -14 12 -14 -10 z" fill="#C8501E"/>
+              <rect x="88" y="52" width="114" height="44" rx="8" fill="#FBF1DD"/>
+              <text x="145" y="81" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-weight="700" font-size="22" fill="#1B0F08">Dal Makhani</text>
+              <path d="M150 154 q20 20 50 18 q30 -2 40 12" stroke="#7A3510" stroke-width="10" fill="none" stroke-linecap="round" opacity=".7"/>
+            </svg>
+            <span class="meta">9:42</span>
+          </div>
+        </div>
+        <div class="composer"><div class="field">Message</div><div class="send"></div></div>
+        <div class="backdrop" id="sheetDim"></div>
+        <div class="sheet" id="sheet">
+          <div class="grab"></div>
+          <h3>Ticket #1042</h3>
+          <div class="pills"><span class="pill pill-red">Damaged</span><span class="pill pill-jev">Angry</span><span class="pill pill-clay">Waiting 2 min</span></div>
+          <div class="line"><span class="check" style="background:var(--clay-bg);color:var(--clay)">!</span>Opened by Jev from Riya’s message</div>
+          <div class="line"><span class="check">✓</span>Customer told the ticket number, photo received</div>
+          <div class="line"><span class="check">✓</span>Your phone pinged. Reminder if open 6+ hours</div>
+          <div class="btns"><div style="background:var(--ink);color:var(--paper)">Reply</div><div style="border:2px solid var(--line)">Resolve</div></div>
+        </div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Chat: order updates + COD -->
+      <section class="scr" id="s-kavya">
+        <div class="chat-head"><span class="chev">‹</span><div class="avatar" style="background:var(--saffron)">KS</div><div><strong>Kavya Shah</strong><small>WhatsApp · Ahmedabad · VIP</small></div></div>
+        <div class="chat-body">
+          <div class="b out" id="k1"><span class="tpl">COD confirmation</span>Hi Kavya, thank you for your order #2307. Amount to pay on delivery: <b>₹1,140</b>. Please confirm so we can pack and ship it.<span class="meta">9:12<span class="tk">✓✓</span></span></div>
+          <div class="qr" id="k2"><div id="k-confirm">Confirm order</div><div>Cancel order</div></div>
+          <div class="b in" id="k3">Confirm order<span class="meta">9:13</span></div>
+          <span class="pill pill-green tag-in" id="k4">✓ COD confirmed · tagged in Shopify</span>
+          <div class="b out" id="k5"><span class="tpl">Order shipped</span>Good news! Order #2307 has shipped. Track it here: <span class="link">thakar.in/t/2307</span><span class="meta">11:30<span class="tk">✓✓</span></span></div>
+          <div class="b out" id="k6"><span class="tpl">Order delivered</span>Order #2307 has been delivered. We hope you enjoy every bite!<span class="meta">Fri<span class="tk">✓✓</span></span></div>
+        </div>
+        <div class="composer"><div class="field">Message</div><div class="send"></div></div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Chat: cart recovery -->
+      <section class="scr" id="s-rohan">
+        <div class="chat-head"><span class="chev">‹</span><div class="avatar">RP</div><div><strong>Rohan P.</strong><small>WhatsApp · Pune</small></div></div>
+        <div class="chat-body">
+          <div class="daychip">Left checkout · 1 hour ago</div>
+          <div class="b out" id="h1"><span class="tpl">Cart reminder</span>Hi Rohan, you left Dal Makhani ×2 in your cart at Thakar Kitchen. Your order is just a tap away:
+            <div class="ordercard" style="margin-top:12px;display:flex;justify-content:space-between;align-items:center"><span><strong>Your cart</strong><br><span style="font-size:22px;color:var(--muted)">2 items · ₹698</span></span><span class="link" style="font-size:25px">Complete order →</span></div>
+            <span class="meta">9:20<span class="tk">✓✓</span></span></div>
+          <div class="b in" id="h2">Oh yes, ordering now!<span class="meta">9:24</span></div>
+          <div class="placed" id="h3"><span class="check">✓</span>Order #2318 placed · ₹698</div>
+          <span class="pill pill-green sys" id="h4">Recovered cart</span>
+        </div>
+        <div class="composer"><div class="field">Message</div><div class="send"></div></div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Customers -->
+      <section class="scr" id="s-customers">
+        <div class="page">
+          <div class="title-row"><div class="page-title">Customers</div><span class="pill pill-green">Synced with Shopify</span></div>
+          <div class="search">Search name, city, tag…</div>
+          <div class="stages">
+            <span class="stage">Everyone<b data-count="412">0</b></span>
+            <span class="stage">New<b data-count="42">0</b></span>
+            <span class="stage">Needs 2nd order<b data-count="118">0</b></span>
+            <span class="stage">Loyal<b data-count="64">0</b></span>
+            <span class="stage" id="vipChip">VIP<b data-count="23">0</b><span class="on" id="vipOn">VIP<b>23</b></span></span>
+            <span class="stage">At risk<b data-count="31">0</b></span>
+            <span class="stage">Lost<b data-count="76">0</b></span>
+          </div>
+        </div>
+        <div class="clist" id="listAll">
+          <h4>Everyone · 412</h4>
+          <div class="crow"><div class="avatar">AM</div><div><strong>Ankit M.</strong><small>Mumbai · <span class="pill pill-line">New</span></small></div><div class="amt">₹540<small>1 order</small></div></div>
+          <div class="crow"><div class="avatar">PK</div><div><strong>Priya K.</strong><small>Delhi · <span class="pill pill-line">Needs 2nd order</span></small></div><div class="amt">₹860<small>1 order</small></div></div>
+          <div class="crow"><div class="avatar" style="background:var(--saffron)">KS</div><div><strong>Kavya Shah</strong><small>Ahmedabad · <span class="pill pill-amber">VIP</span></small></div><div class="amt">₹8,420<small>11 orders</small></div></div>
+          <div class="crow"><div class="avatar">RP</div><div><strong>Rohan P.</strong><small>Pune · <span class="pill pill-line">Loyal</span></small></div><div class="amt">₹2,180<small>3 orders</small></div></div>
+        </div>
+        <div class="clist" id="listVip">
+          <h4>VIP · 23 customers</h4>
+          <div class="crow" id="kavyaRow"><div class="avatar" style="background:var(--saffron)">KS</div><div><strong>Kavya Shah</strong><small>Ahmedabad · 11 orders</small></div><div class="amt">₹8,420<small>spent</small></div></div>
+          <div class="crow"><div class="avatar">AM</div><div><strong>Arjun Mehta</strong><small>Mumbai · 9 orders</small></div><div class="amt">₹6,980<small>spent</small></div></div>
+          <div class="crow"><div class="avatar">ND</div><div><strong>Neha Desai</strong><small>Surat · 7 orders</small></div><div class="amt">₹5,640<small>spent</small></div></div>
+          <div class="crow"><div class="avatar">VR</div><div><strong>Vikram Rao</strong><small>Bengaluru · 6 orders</small></div><div class="amt">₹5,210<small>spent</small></div></div>
+        </div>
+        <div class="tabbar" data-tab="customers"></div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Profile -->
+      <section class="scr" id="s-profile">
+        <div class="prof-head"><span class="chev">‹</span><span style="font-size:26px;color:var(--terracotta);font-weight:600">Customers</span></div>
+        <div class="prof">
+          <div class="prof-top" id="pf0"><div class="avatar">KS</div><div><h2>Kavya Shah</h2>
+            <div class="prof-pills"><span class="pill pill-amber">VIP</span><span class="pill pill-line">Ahmedabad</span><span class="pill pill-green">Shopify ✓</span></div></div></div>
+          <div class="stats" id="pf1">
+            <div class="stat"><b>11</b><span>orders</span></div>
+            <div class="stat"><b>₹8,420</b><span>spent</span></div>
+            <div class="stat"><b>24 days</b><span>between orders</span></div>
+          </div>
+          <div class="sec" id="pf2"><h3>History</h3>
+            <div class="tl"><i></i>Order #2307 delivered · ₹1,140<small>Fri</small></div>
+            <div class="tl"><i></i>Confirmed COD on WhatsApp<small>Wed</small></div>
+            <div class="tl"><i></i>Read “Diwali restock” campaign<small>Tue</small></div>
+            <div class="tl"><i></i>Usually buys Methi Thepla, Dal Makhani<small></small></div>
+          </div>
+          <div class="sec" id="pf3"><h3>Tags</h3>
+            <div class="tags"><span class="pill pill-line">gifting</span><span class="pill pill-line">loves thepla</span><span class="pill pill-line">COD</span><span class="pill pill-line">birthday · 12 Nov</span></div>
+          </div>
+          <div class="sec" id="pf4"><h3>Remind me</h3>
+            <div class="toggle-row">Reorder reminder · in 20 days<span class="toggle" id="tg0"><span class="fill"></span><span class="knob"></span></span></div>
+          </div>
+        </div>
+        <div class="dim"></div>
+      </section>
+
+      <!-- Campaigns -->
+      <section class="scr" id="s-campaigns">
+        <div class="page">
+          <div class="page-title">Campaigns</div>
+          <div class="card camp" id="cp0">
+            <div class="camp-name">Diwali restock</div>
+            <div class="sub">VIP + Loyal · 187 people · sent Tue 7 pm</div>
+            <div class="ckpis">
+              <div class="ckpi"><div class="kpi-label">Sent</div><div class="kpi-value" data-count="187">0</div></div>
+              <div class="ckpi"><div class="kpi-label">Read</div><div class="kpi-value" data-count="91" data-suffix="%">0</div></div>
+              <div class="ckpi"><div class="kpi-label">Replied</div><div class="kpi-value" data-count="12">0</div></div>
+              <div class="ckpi win" id="cp1"><div><div class="kpi-label">Orders</div><div class="kpi-value" data-count="14">0</div></div><div><div class="kpi-value" data-count="23800" data-prefix="₹">0</div><div class="kpi-sub">within 7 days</div></div></div>
+            </div>
+            <div class="money">Money in vs. money out · <b style="color:var(--ink)">₹23,800</b> in · ₹161 out</div>
+            <div class="bar"><i id="moneyBar"></i></div>
+          </div>
+          <div class="card camp" id="cp2">
+            <h2>Running on their own</h2>
+            <div class="toggle-row">Cart reminders<span class="toggle" id="tg1"><span class="fill"></span><span class="knob"></span></span></div>
+            <div class="toggle-row">Reorder reminders<span class="toggle" id="tg2"><span class="fill"></span><span class="knob"></span></span></div>
+            <div class="toggle-row">Back-in-stock alerts<span class="toggle" id="tg3"><span class="fill"></span><span class="knob"></span></span></div>
+          </div>
+        </div>
+        <div class="tabbar" data-tab="campaigns"></div>
+        <div class="dim"></div>
+      </section>
+
+      <div id="notif" class="abs">
+        <div class="app-ico">TK</div>
+        <div style="flex:1">
+          <div class="notif-head"><span>THAKAR INBOX</span><span>now</span></div>
+          <div class="notif-title">Jev · Urgent: Riya S. is upset</div>
+          <div class="notif-body">Damaged order, photo attached. Ticket #1042 is waiting for you.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tap" class="abs"></div>
+
+  <div id="end" class="abs">
+    <div id="endLogo">TK</div>
+    <div id="endLine">Support that<br>runs itself.</div>
+    <div id="endBrand">THAKAR KITCHEN</div>
+    <div id="endChips">
+      <span>Inbox</span><span>Tickets</span><span>AI answers</span><span class="hl">Jev</span><span>Order updates</span>
+      <span>COD</span><span>Cart recovery</span><span>CRM</span><span>Campaigns</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- Timing helpers -------------------------------------------------------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const easeOut = (x) => 1 - Math.pow(1 - x, 4);
+const easeInOut = (x) => (x < 0.5 ? 8 * x ** 4 : 1 - Math.pow(-2 * x + 2, 4) / 2);
+const backOut = (x) => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2;
+// Eased 0..1 progress of t across [start, start + dur].
+const p = (t, start, dur, ease = easeOut) => ease(clamp((t - start) / dur));
+const lerp = (a, b, k) => a + (b - a) * k;
+const $ = (id) => document.getElementById(id);
+const set = (el, opacity, transform = '') => { el.style.opacity = opacity; el.style.transform = transform; };
+// Fade an element up into place from `at`.
+const show = (id, t, at, dy = 24, dur = 0.45) => { const k = p(t, at, dur); set($(id), k, `translateY(${(1 - k) * dy}px)`); };
+const fmt = (n) => n.toLocaleString('en-IN');
+// Numbers count up from 0 between `at` and `at + dur`.
+function countUp(root, t, at, dur = 0.9) {
+  root.querySelectorAll('[data-count]').forEach((el) => {
+    const n = Math.round(Number(el.dataset.count) * p(t, at, dur, easeOut));
+    el.firstChild.nodeValue = (el.dataset.prefix || '') + fmt(n) + (el.dataset.suffix || '');
+  });
+}
+
+// ---- Tab bar (public/index.html) -----------------------------------------
+const ICONS = {
+  home: '<path d="M6 18 L20 6 L34 18 V34 H24 V24 H16 V34 H6 Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>',
+  inbox: '<path d="M5 22 L10 7 H30 L35 22 V33 H5 Z M5 22 H14 L16 26 H24 L26 22 H35" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>',
+  customers: '<circle cx="15" cy="13" r="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M4 33 c0-7 5-11 11-11 s11 4 11 11" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="28" cy="14" r="4.5" fill="none" stroke="currentColor" stroke-width="3"/><path d="M29 22 c4 1 7 4 7 10" fill="none" stroke="currentColor" stroke-width="3"/>',
+  campaigns: '<path d="M6 16 V25 H12 L28 33 V8 L12 16 Z M12 25 L15 34" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M32 15 q3 5 0 10" fill="none" stroke="currentColor" stroke-width="3"/>',
+  more: '<path d="M7 11 H33 M7 20 H33 M7 29 H33" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+};
+const TAB_LABELS = { home: 'Home', inbox: 'Inbox', customers: 'Customers', campaigns: 'Campaigns', more: 'More' };
+document.querySelectorAll('.tabbar').forEach((bar) => {
+  bar.innerHTML = Object.keys(TAB_LABELS).map((k) => `
+    <div class="tab${k === bar.dataset.tab ? ' on' : ''}" data-key="${k}">
+      <svg viewBox="0 0 40 40">${ICONS[k]}</svg>${TAB_LABELS[k]}
+      ${k === 'inbox' ? '<span class="badge">2</span>' : ''}
+    </div>`).join('');
+});
+const tabEl = (screen, key) => document.querySelector(`#s-${screen} .tab[data-key="${key}"]`);
+
+// ---- Inbox rows -------------------------------------------------------------
+// handled: when the row gets its "done" pill (the chat beat shows it happening).
+const ROWS = [
+  { id: 'riya', name: 'Riya S.', init: 'RS', msg: 'Packet phata hua aaya, sab leak…', time: 'now', at: 12.55,
+    pill: '<span class="pill pill-jev">Jev · Urgent</span>', handled: 12.55, needs: true },
+  { id: 'ankit', name: 'Ankit M.', init: 'AM', msg: 'Where is my order #2291?', time: '9:38',
+    pill: '<span class="pill pill-green">✓ Auto-answered</span>', handled: 7.9 },
+  { id: 'priya', name: 'Priya K.', init: 'PK', msg: 'Dal ko fridge mein rakhna padega?', time: '9:39',
+    pill: '<span class="pill pill-amber">✓ AI answer</span>', handled: 10.9 },
+  { id: 'kavya', name: 'Kavya Shah', init: 'KS', msg: 'Confirm order', time: '9:13',
+    pill: '<span class="pill pill-green">COD confirmed</span>', handled: 0 },
+  { id: 'rohan', name: 'Rohan P.', init: 'RP', msg: 'Oh yes, ordering now!', time: '9:24',
+    pill: '<span class="pill pill-green">Recovered cart</span>', handled: 0 },
+  { id: 'meera', name: 'Meera J.', init: 'MJ', msg: 'Kevi rite garam karvanu?', time: '8:55',
+    pill: '<span class="pill pill-amber">✓ AI answer</span>', handled: 0 },
+];
+const ROW_H = 150;
+const ilist = $('ilist');
+for (const r of ROWS) {
+  const el = document.createElement('div');
+  el.className = 'irow' + (r.id === 'riya' ? ' urgent' : '');
+  el.id = 'row-' + r.id;
+  el.innerHTML = `
+    <div class="avatar" style="${r.id === 'riya' ? 'background:#F6C9C0' : r.id === 'kavya' ? 'background:var(--saffron)' : ''}">${r.init}</div>
+    <div class="irow-main"><strong>${r.name}</strong><div class="irow-msg">${r.msg}</div></div>
+    <div class="irow-side"><time>${r.time}</time><div class="slot"><div class="dot" id="dot-${r.id}"></div><span id="pill-${r.id}">${r.pill}</span></div></div>`;
+  ilist.appendChild(el);
+}
+function renderInbox(t) {
+  const riya = p(t, 12.55, 0.45);
+  let needs = 0;
+  ROWS.forEach((r, i) => {
+    const el = $('row-' + r.id);
+    if (r.id === 'riya') {
+      set(el, riya, `translateY(${(1 - riya) * -30}px) scale(${lerp(0.95, 1, riya)})`);
+      el.style.top = '0px';
+    } else {
+      el.style.top = (i - 1 + riya) * ROW_H + 'px';
+    }
+    const done = r.handled <= t;
+    $('dot-' + r.id).style.opacity = done ? 0 : 1;
+    $('pill-' + r.id).style.opacity = done ? 1 : 0;
+    if ((r.id === 'riya' && t >= r.at) || (r.id !== 'riya' && !done)) needs++;
+  });
+  $('needsCount').textContent = needs;
+  document.querySelectorAll('.tab .badge').forEach((b) => { b.textContent = needs; b.style.opacity = needs ? 1 : 0; });
+}
+
+// ---- Navigation ---------------------------------------------------------------
+// [time, kind, from, to]. push = slide in from the right; pop = back; fade = tab switch.
+const NAV = [
+  [-1, 'cut', null, 'home'],
+  [6.0, 'fade', 'home', 'inbox'],
+  [6.6, 'push', 'inbox', 'ankit'],
+  [9.45, 'pop', 'ankit', 'inbox'],
+  [10.0, 'push', 'inbox', 'priya'],
+  [12.3, 'pop', 'priya', 'inbox'],
+  [13.15, 'push', 'inbox', 'riya'],
+  [17.05, 'pop', 'riya', 'inbox'],
+  [17.6, 'push', 'inbox', 'kavya'],
+  [20.4, 'pop', 'kavya', 'inbox'],
+  [20.95, 'push', 'inbox', 'rohan'],
+  [23.15, 'pop', 'rohan', 'inbox'],
+  [23.75, 'fade', 'inbox', 'customers'],
+  [25.7, 'push', 'customers', 'profile'],
+  [28.1, 'pop', 'profile', 'customers'],
+  [28.7, 'fade', 'customers', 'campaigns'],
+];
+// Taps: [time, element]. Each shows a soft press just before its navigation.
+const TAPS = [
+  [5.72, () => tabEl('home', 'inbox')],
+  [6.35, () => $('row-ankit')],
+  [9.75, () => $('row-priya')],
+  [12.9, () => $('row-riya')],
+  [17.35, () => $('row-kavya')],
+  [18.35, () => $('k-confirm')],
+  [20.7, () => $('row-rohan')],
+  [23.5, () => tabEl('inbox', 'customers')],
+  [24.55, () => $('vipChip')],
+  [25.45, () => $('kavyaRow')],
+  [28.45, () => tabEl('customers', 'campaigns')],
+];
+const SCREENS = ['home', 'inbox', 'ankit', 'priya', 'riya', 'kavya', 'rohan', 'customers', 'profile', 'campaigns'];
+
+function screenState(id, t) {
+  let s = { x: 0, o: 0, dim: 0, z: 0 };
+  for (const [at, kind, from, to] of NAV) {
+    if (at > t || (from !== id && to !== id)) continue;
+    const dur = kind === 'fade' ? 0.32 : 0.5;
+    const k = kind === 'cut' ? 1 : p(t, at, dur, easeInOut);
+    const entering = to === id;
+    if (kind === 'cut' || kind === 'fade') s = entering ? { x: 0, o: k, dim: 0, z: 2 } : { x: 0, o: 1 - k, dim: 0, z: 1 };
+    else if (kind === 'push') s = entering ? { x: (1 - k) * 100, o: 1, dim: 0, z: 2 } : { x: -30 * k, o: k < 1 ? 1 : 0, dim: 0.3 * k, z: 1 };
+    else if (kind === 'pop') s = entering ? { x: -30 * (1 - k), o: 1, dim: 0.3 * (1 - k), z: 1 } : { x: 100 * k, o: k < 1 ? 1 : 0, dim: 0, z: 2 };
+  }
+  return s;
+}
+function renderScreens(t) {
+  for (const id of SCREENS) {
+    const s = screenState(id, t);
+    const el = $('s-' + id);
+    el.style.opacity = s.o;
+    el.style.visibility = s.o > 0 ? 'visible' : 'hidden';
+    el.style.transform = `translateX(${s.x}%)`;
+    el.style.zIndex = s.z;
+    el.querySelector(':scope > .dim').style.opacity = s.dim;
+    if (id === 'riya' && s.x > 0) el.style.boxShadow = '-20px 0 40px rgba(40,20,5,.15)';
+  }
+}
+function renderTap(t) {
+  const tap = $('tap');
+  const cur = TAPS.find(([at]) => t >= at - 0.05 && t < at + 0.5);
+  if (!cur) { tap.style.opacity = 0; return; }
+  const [at, target] = cur;
+  const r = target().getBoundingClientRect();
+  const k = clamp((t - at) / 0.45);
+  tap.style.left = r.left + r.width / 2 + 'px';
+  tap.style.top = r.top + r.height / 2 + 'px';
+  tap.style.opacity = t < at ? 0 : Math.sin(Math.PI * Math.min(1, k * 1.2)) * 0.95;
+  tap.style.transform = `scale(${lerp(0.55, 1.05, easeOut(k))})`;
+}
+
+// ---- Beats --------------------------------------------------------------------
+function renderHome(t) {
+  countUp($('s-home'), t, 3.6, 1.1);
+  ['k-ans', 'k-wait', 'k-tix', 'k-cod'].forEach((id, i) => show(id, t, 3.3 + i * 0.1, 30));
+  ['d0', 'd1', 'd2', 'd3'].forEach((id, i) => show(id, t, 4.1 + i * 0.22, 16));
+}
+function renderChats(t) {
+  show('a1', t, 6.95); show('a2', t, 7.4); show('a3', t, 7.9, 12);
+  show('p1', t, 10.35); show('p2', t, 10.8); show('p3', t, 11.2, 12); show('p4', t, 11.75);
+  // Jev
+  show('r1', t, 13.35);
+  const jev = p(t, 13.75, 0.5, backOut);
+  set($('r2'), clamp(jev * 1.4), `scale(${lerp(0.6, 1, jev)})`);
+  const phase = ((t - 14.2) % 1.1) / 1.1;
+  const ring = $('r2ring');
+  if (t > 14.2) { ring.style.opacity = (1 - phase) * 0.7; ring.style.transform = `scale(${1 + phase * 0.12}, ${1 + phase * 0.6})`; }
+  else ring.style.opacity = 0;
+  show('r3', t, 14.15); show('r4', t, 14.7);
+  const sheet = p(t, 15.15, 0.55) * (1 - p(t, 16.7, 0.35, easeInOut));
+  $('sheet').style.transform = `translateY(${(1 - sheet) * 110}%)`;
+  $('sheetDim').style.opacity = sheet * 0.35;
+  const nIn = p(t, 15.75, 0.5);
+  const nOut = p(t, 16.6, 0.35, easeInOut);
+  set($('notif'), nIn * (1 - nOut), `translateY(${(1 - nIn) * -220 - nOut * 220}px)`);
+  // Order updates and COD
+  show('k1', t, 17.8); show('k2', t, 17.95, 14);
+  $('k-confirm').style.background = t > 18.4 ? '#F8D9A8' : '';
+  show('k3', t, 18.65); show('k4', t, 18.9, 12); show('k5', t, 19.3); show('k6', t, 19.75);
+  // Cart recovery
+  show('h1', t, 21.2); show('h2', t, 21.75); show('h3', t, 22.15, 20);
+  const rec = p(t, 22.45, 0.5, backOut);
+  set($('h4'), clamp(rec * 1.4), `scale(${lerp(0.6, 1, rec)})`);
+}
+function renderCustomers(t) {
+  countUp($('s-customers'), t, 23.85, 0.9);
+  const vip = p(t, 24.7, 0.3, easeInOut);
+  $('vipOn').style.opacity = vip;
+  set($('listAll'), 1 - vip, `translateY(${vip * -10}px)`);
+  set($('listVip'), vip, `translateY(${(1 - vip) * 20}px)`);
+  ['pf0', 'pf1', 'pf2', 'pf3', 'pf4'].forEach((id, i) => show(id, t, 25.9 + i * 0.22, 26));
+  renderToggle('tg0', t, 27.0);
+}
+function renderToggle(id, t, at) {
+  const k = p(t, at, 0.35, easeInOut);
+  const el = $(id);
+  el.querySelector('.fill').style.opacity = k;
+  el.querySelector('.knob').style.transform = `translateX(${k * 36}px)`;
+}
+function renderCampaigns(t) {
+  countUp($('s-campaigns'), t, 29.0, 1.0);
+  show('cp0', t, 28.85, 30); show('cp2', t, 29.3, 30);
+  $('moneyBar').style.width = 99.3 * p(t, 29.3, 1.0) + '%';
+  ['tg1', 'tg2', 'tg3'].forEach((id, i) => renderToggle(id, t, 29.9 + i * 0.18));
+  const win = p(t, 29.9, 0.5, backOut);
+  $('cp1').style.transform = `scale(${lerp(0.94, 1, win)})`;
+}
+
+const CAPS = [['c0', 3.4, 5.95], ['c1', 6.15, 9.4], ['c2', 9.6, 12.3], ['c3', 12.5, 16.95],
+  ['c4', 17.15, 20.35], ['c5', 20.55, 23.2], ['c6', 23.4, 28.4], ['c7', 28.6, 31.3]];
+function renderCaptions(t) {
+  for (const [id, a, b] of CAPS) {
+    const k = p(t, a, 0.45) * (1 - p(t, b - 0.3, 0.3, easeInOut));
+    set($(id), k, `translateY(${(1 - p(t, a, 0.45)) * 30}px)`);
+  }
+}
+
+// ---- Frame ----------------------------------------------------------------
+window.render = function (t) {
+  ['w0', 'w1', 'w2', 'w3'].forEach((id, i) => {
+    const k = p(t, 0.15 + i * 0.38, 0.55);
+    set($(id), k * lerp(1, 0.28, p(t, 1.95, 0.5, easeInOut)), `translateY(${(1 - k) * 60}px)`);
+  });
+  const ay = p(t, 2.0, 0.55);
+  set($('allOnYou'), ay, `translateY(${(1 - ay) * 50}px)`);
+  const out = p(t, 2.95, 0.5, easeInOut);
+  set($('intro'), 1 - out, `translateY(${-120 * out}px)`);
+
+  // Phone: rise, gentle drift, firmer pushes on Jev and on the campaign money, then leave.
+  const rise = p(t, 3.0, 0.9);
+  const leave = p(t, 31.25, 0.8, easeInOut);
+  const push = lerp(1, 1.02, p(t, 4, 26, easeInOut))
+    * lerp(1, 1.04, p(t, 13.6, 1.4, easeInOut) * (1 - p(t, 16.6, 0.6, easeInOut)))
+    * lerp(1, 1.04, p(t, 29.4, 1.4, easeInOut));
+  $('phone').style.opacity = rise * (1 - leave);
+  $('phone').style.transform =
+    `translateY(${(1 - rise) * 1500 + leave * 900}px) scale(${lerp(0.94, 1, rise) * push * lerp(1, 0.9, leave)})`;
+
+  renderCaptions(t);
+  renderScreens(t);
+  renderHome(t);
+  renderInbox(t);
+  renderChats(t);
+  renderCustomers(t);
+  renderCampaigns(t);
+  renderTap(t);
+
+  // End card
+  const logo = p(t, 31.75, 0.7);
+  const line = p(t, 32.05, 0.8);
+  const brand = p(t, 32.5, 0.7);
+  $('end').style.opacity = logo > 0 ? 1 : 0;
+  set($('endLogo'), logo, `scale(${lerp(0.85, 1, logo)})`);
+  set($('endLine'), line, `translateY(${(1 - line) * 50}px)`);
+  set($('endBrand'), brand, `translateY(${(1 - brand) * 30}px)`);
+  [...$('endChips').children].forEach((el, i) => {
+    const k = p(t, 32.9 + i * 0.1, 0.45);
+    set(el, k, `translateY(${(1 - k) * 24}px) scale(${lerp(0.9, 1, k)})`);
+  });
+};
+
+window.DURATION = 35;
+window.render(Number(new URLSearchParams(location.search).get('t') || 0));
+</script>
+</body>
+</html>
