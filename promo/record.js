@@ -74,7 +74,7 @@ async function main() {
     execFileSync('node', [path.join(__dirname, 'sound.js'), cuesFile, wav], { stdio: 'inherit' });
     execFileSync('ffmpeg', [
       '-y', '-loglevel', 'error', '-i', silent, '-i', wav, '-map', '0:v', '-map', '1:a', '-c:v', 'copy',
-      '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
+      '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11,alimiter=limit=0.79:level=false', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
       '-shortest', '-movflags', '+faststart', OUT,
     ], { stdio: 'inherit' });
   }
