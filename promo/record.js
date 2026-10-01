@@ -4,6 +4,9 @@
 //   node promo/record.js                 scene.html    -> thakar-support-promo.mp4
 //   node promo/record.js features        features.html -> thakar-features-promo.mp4
 //   add --frames <dir> to keep the PNG frames somewhere specific
+//
+// A scene that sets window.SOUND_CUES gets a soundtrack from sound.js, mixed
+// in and loudness-normalised for social video (-14 LUFS).
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,7 +16,7 @@ const { chromium } = require('playwright');
 const FPS = 30;
 const SCENES = {
   scene: { out: 'thakar-support-promo.mp4', poster: 'poster.png', posterAt: 17.2 },
-  features: { out: 'thakar-features-promo.mp4', poster: 'features-poster.png', posterAt: 34.5 },
+  features: { out: 'thakar-features-promo.mp4', poster: 'features-poster.png', posterAt: 61 },
 };
 
 async function main() {
@@ -47,6 +50,7 @@ async function main() {
   if (!fontsOk) throw new Error('Fonts did not load (Google Fonts unreachable?)');
 
   const duration = await page.evaluate(() => window.DURATION);
+  const cues = await page.evaluate(() => window.SOUND_CUES || null);
   const frames = Math.round(duration * FPS);
   for (let i = 0; i < frames; i++) {
     await page.evaluate((t) => window.render(t), i / FPS);
@@ -57,10 +61,23 @@ async function main() {
   await page.screenshot({ path: POSTER });
   await browser.close();
 
+  const silent = cues ? path.join(framesDir, 'silent.mp4') : OUT;
   execFileSync('ffmpeg', [
     '-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(framesDir, 'f%04d.png'),
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', OUT,
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', silent,
   ], { stdio: 'inherit' });
+
+  if (cues) {
+    const cuesFile = path.join(framesDir, 'cues.json');
+    const wav = path.join(framesDir, 'sound.wav');
+    fs.writeFileSync(cuesFile, JSON.stringify({ duration, cues }));
+    execFileSync('node', [path.join(__dirname, 'sound.js'), cuesFile, wav], { stdio: 'inherit' });
+    execFileSync('ffmpeg', [
+      '-y', '-loglevel', 'error', '-i', silent, '-i', wav, '-map', '0:v', '-map', '1:a', '-c:v', 'copy',
+      '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000',
+      '-shortest', '-movflags', '+faststart', OUT,
+    ], { stdio: 'inherit' });
+  }
   console.log(`Wrote ${OUT} and ${POSTER}`);
 }
 

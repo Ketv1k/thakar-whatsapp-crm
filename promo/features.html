@@ -33,6 +33,12 @@
   .caption em { color: var(--terracotta); }
 
   /* Phone */
+  /* The camera: zooms the phone in on each beat's key moment. */
+  #cam { left: 0; top: 0; width: 1080px; height: 1920px; transform-origin: 0 0; z-index: 1; }
+  /* Keeps captions readable when the zoomed phone slides under them. */
+  #capband { left: 0; right: 0; top: 0; height: 360px; z-index: 2; opacity: 0;
+    background: linear-gradient(var(--cream) 0%, var(--cream) 72%, rgba(251, 241, 221, 0) 100%); }
+  .caption, #intro, #end { z-index: 3; }
   #phone { left: 150px; top: 330px; width: 780px; height: 1560px; border-radius: 112px;
     background: #120A05; padding: 20px; transform-origin: 50% 42%; opacity: 0;
     box-shadow: 0 60px 120px rgba(80, 40, 10, .28), 0 0 0 3px #3A2A1E inset; }
@@ -261,6 +267,7 @@
     <span class="word" id="allOnYou">All on you.</span>
   </div>
 
+  <div id="capband" class="abs"></div>
   <div class="caption abs" id="c0">Wake up to it<br><em>already handled.</em></div>
   <div class="caption abs" id="c1">“Where’s my order?”<br><em>Answered in the chat.</em></div>
   <div class="caption abs" id="c2">Product questions?<br><em>Answered by AI.</em></div>
@@ -270,6 +277,7 @@
   <div class="caption abs" id="c6">Every customer,<br><em>known by heart.</em></div>
   <div class="caption abs" id="c7">Campaigns that<br><em>pay for themselves.</em></div>
 
+  <div id="cam" class="abs">
   <div id="phone" class="abs">
     <div id="screen">
       <div class="island"></div>
@@ -421,7 +429,7 @@
         <div class="page">
           <div class="title-row"><div class="page-title">Customers</div><span class="pill pill-green">Synced with Shopify</span></div>
           <div class="search">Search name, city, tag…</div>
-          <div class="stages">
+          <div class="stages" id="stages">
             <span class="stage">Everyone<b data-count="412">0</b></span>
             <span class="stage">New<b data-count="42">0</b></span>
             <span class="stage">Needs 2nd order<b data-count="118">0</b></span>
@@ -512,6 +520,8 @@
         </div>
       </div>
     </div>
+  </div>
+
   </div>
 
   <div id="tap" class="abs"></div>
@@ -701,9 +711,9 @@ function renderChats(t) {
   show('r1', t, 13.35);
   const jev = p(t, 13.75, 0.5, backOut);
   set($('r2'), clamp(jev * 1.4), `scale(${lerp(0.6, 1, jev)})`);
-  const phase = ((t - 14.2) % 1.1) / 1.1;
+  const phase = (NOW % 1.1) / 1.1;
   const ring = $('r2ring');
-  if (t > 14.2) { ring.style.opacity = (1 - phase) * 0.7; ring.style.transform = `scale(${1 + phase * 0.12}, ${1 + phase * 0.6})`; }
+  if (t > 14.0) { ring.style.opacity = (1 - phase) * 0.7; ring.style.transform = `scale(${1 + phase * 0.12}, ${1 + phase * 0.6})`; }
   else ring.style.opacity = 0;
   show('r3', t, 14.15); show('r4', t, 14.7);
   const sheet = p(t, 15.15, 0.55) * (1 - p(t, 16.7, 0.35, easeInOut));
@@ -746,7 +756,7 @@ function renderCampaigns(t) {
 }
 
 const CAPS = [['c0', 3.4, 5.95], ['c1', 6.15, 9.4], ['c2', 9.6, 12.3], ['c3', 12.5, 16.95],
-  ['c4', 17.15, 20.35], ['c5', 20.55, 23.2], ['c6', 23.4, 28.4], ['c7', 28.6, 31.3]];
+  ['c4', 17.15, 20.35], ['c5', 20.55, 23.45], ['c6', 23.5, 28.4], ['c7', 28.6, 31.3]];
 function renderCaptions(t) {
   for (const [id, a, b] of CAPS) {
     const k = p(t, a, 0.45) * (1 - p(t, b - 0.3, 0.3, easeInOut));
@@ -754,8 +764,9 @@ function renderCaptions(t) {
   }
 }
 
-// ---- Frame ----------------------------------------------------------------
-window.render = function (t) {
+// ---- Scene at scene time t (the original 35s timeline) ---------------------
+let NOW = 0; // video time, for things that should keep moving during holds
+function renderScene(t) {
   ['w0', 'w1', 'w2', 'w3'].forEach((id, i) => {
     const k = p(t, 0.15 + i * 0.38, 0.55);
     set($(id), k * lerp(1, 0.28, p(t, 1.95, 0.5, easeInOut)), `translateY(${(1 - k) * 60}px)`);
@@ -782,7 +793,6 @@ window.render = function (t) {
   renderChats(t);
   renderCustomers(t);
   renderCampaigns(t);
-  renderTap(t);
 
   // End card
   const logo = p(t, 31.75, 0.7);
@@ -794,9 +804,112 @@ window.render = function (t) {
     const k = p(t, 32.9 + i * 0.1, 0.45);
     set(el, k, `translateY(${(1 - k) * 24}px) scale(${lerp(0.9, 1, k)})`);
   });
+}
+
+// ---- Pacing -------------------------------------------------------------------
+// The scene was authored on a 35s timeline (t). BEATS stretches it into the
+// video (T): each row plays the scene up to `t` over `secs` of video. Holds
+// barely advance t, so a key moment stays on screen, and the camera zooms in
+// on `zoom` (element ids; their combined box) by `z`.
+const BEATS = [
+  { t: 3.0, secs: 3.2 },                                               // intro
+  { t: 5.1, secs: 2.5 },                                               // phone rises on Home
+  { t: 5.3, secs: 2.1, zoom: ['k-ans', 'd3'], z: 1.2 },
+  { t: 5.72, secs: 0.6 },
+  { t: 7.95, secs: 2.7 },                                              // where's my order
+  { t: 8.2, secs: 2.1, zoom: ['a1', 'a3'], z: 1.3 },
+  { t: 9.45, secs: 0.9 },
+  { t: 11.65, secs: 2.7 },                                             // FAQ
+  { t: 11.72, secs: 2.0, zoom: ['p1', 'p3'], z: 1.3 },
+  { t: 12.3, secs: 0.9 },
+  { t: 14.08, secs: 2.6 },                                             // Jev
+  { t: 14.14, secs: 2.1, zoom: ['r1', 'r2'], z: 1.4 },
+  { t: 15.75, secs: 2.1 },                                             // ticket sheet
+  { t: 16.28, secs: 0.7 },                                             // notification
+  { t: 16.4, secs: 2.5 },
+  { t: 17.05, secs: 0.8 },
+  { t: 19.28, secs: 2.8 },                                             // COD
+  { t: 19.3, secs: 2.0, zoom: ['k1', 'k4'], z: 1.2 },
+  { t: 20.3, secs: 1.6 },                                              // shipped, delivered
+  { t: 20.38, secs: 0.8 },
+  { t: 22.95, secs: 3.0 },                                             // cart recovery
+  { t: 23.1, secs: 2.0, zoom: ['h1', 'h4'], z: 1.22 },
+  { t: 25.05, secs: 2.5 },                                             // customers
+  { t: 25.3, secs: 1.9, zoom: ['stages', 'listVip'], z: 1.15 },
+  { t: 27.35, secs: 2.5 },                                             // profile
+  { t: 27.55, secs: 2.0, zoom: ['pf1', 'pf2'], z: 1.3 },
+  { t: 28.1, secs: 0.6 },
+  { t: 30.6, secs: 2.9 },                                              // campaigns
+  { t: 30.9, secs: 2.4, zoom: ['cp1', 'moneyBar'], z: 1.35 },
+  { t: 35.0, secs: 4.4 },                                              // end card
+];
+// Breakpoints [T, t] of the piecewise-linear map, and the zoom windows.
+const KEYS = [[0, 0]];
+const ZOOMS = [];
+for (const b of BEATS) {
+  const [T0, t0] = KEYS[KEYS.length - 1];
+  KEYS.push([T0 + b.secs, b.t]);
+  if (b.zoom) ZOOMS.push({ from: T0, to: T0 + b.secs, ids: b.zoom, z: b.z });
+}
+const toScene = (T) => {
+  for (let i = 1; i < KEYS.length; i++) {
+    const [T1, t1] = KEYS[i];
+    const [T0, t0] = KEYS[i - 1];
+    if (T <= T1) return lerp(t0, t1, (T - T0) / (T1 - T0));
+  }
+  return KEYS[KEYS.length - 1][1];
+};
+const toVideo = (t) => {
+  for (let i = 1; i < KEYS.length; i++) {
+    const [T1, t1] = KEYS[i];
+    const [T0, t0] = KEYS[i - 1];
+    if (t <= t1) return lerp(T0, T1, (t - t0) / (t1 - t0));
+  }
+  return KEYS[KEYS.length - 1][0];
 };
 
-window.DURATION = 35;
+// Camera: ease in on the zoom target so it sits at FOCUS, hold, ease back out.
+const FOCUS = [540, 1110];
+function renderCamera(T) {
+  const cam = $('cam');
+  cam.style.transform = 'none';
+  const zm = ZOOMS.find((w) => T >= w.from && T <= w.to);
+  let k = 0;
+  if (zm) k = p(T, zm.from, 0.7, easeInOut) * (1 - p(T, zm.to - 0.55, 0.55, easeInOut));
+  $('capband').style.opacity = clamp(k * 1.5);
+  if (!k) return;
+  const rects = zm.ids.map((id) => $(id).getBoundingClientRect());
+  const cx = (Math.min(...rects.map((r) => r.left)) + Math.max(...rects.map((r) => r.right))) / 2;
+  const cy = (Math.min(...rects.map((r) => r.top)) + Math.max(...rects.map((r) => r.bottom))) / 2;
+  const z = lerp(1, zm.z, k);
+  const dx = lerp(0, FOCUS[0] - zm.z * cx, k);
+  const dy = lerp(0, FOCUS[1] - zm.z * cy, k);
+  cam.style.transform = `translate(${dx}px, ${dy}px) scale(${z})`;
+}
+
+window.render = function (T) {
+  NOW = T;
+  renderScene(toScene(T));
+  renderCamera(T);
+  renderTap(toScene(T)); // after the camera, so the ripple lands on the zoomed target
+};
+window.DURATION = KEYS[KEYS.length - 1][0];
+
+// ---- Sound cues (scene time → video time), read by record.js -----------------
+const CUES = [
+  [0.15, 'thump'], [0.53, 'thump'], [0.91, 'thump'], [1.29, 'thump'], [2.0, 'hit'], [3.0, 'rise'],
+  ...TAPS.map(([at]) => [at, 'tap']),
+  ...NAV.filter(([at, kind]) => kind !== 'cut').map(([at]) => [at, 'whoosh']),
+  [6.95, 'pop'], [10.35, 'pop'], [11.75, 'pop'], [12.55, 'pop'], [13.35, 'pop'], [14.7, 'pop'], [18.65, 'pop'], [21.75, 'pop'],
+  [7.4, 'send'], [10.8, 'send'], [14.15, 'send'], [17.8, 'send'], [19.3, 'send'], [19.75, 'send'], [21.2, 'send'],
+  [7.9, 'success'], [11.2, 'success'], [18.9, 'success'],
+  [13.75, 'alert'], [15.15, 'whoosh'], [15.75, 'chime'],
+  [22.45, 'kaching'], [29.9, 'kaching'],
+  [27.0, 'toggle'], [29.9, 'toggle'], [30.08, 'toggle'], [30.26, 'toggle'],
+  [31.25, 'whoosh'], [31.75, 'swell'],
+];
+window.SOUND_CUES = CUES.map(([t, type]) => ({ T: +toVideo(t).toFixed(3), type })).sort((a, b) => a.T - b.T);
+
 window.render(Number(new URLSearchParams(location.search).get('t') || 0));
 </script>
 </body>
