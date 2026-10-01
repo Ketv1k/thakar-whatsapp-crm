@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Thakar Kitchen promo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,500;1,600;1,700&family=Work+Sans:wght@400;500;600;700&display=block" rel="stylesheet">
+<style>
+  /* Colours from public/styles.css */
+  :root {
+    --cream: #FBF1DD; --paper: #FFFAF1; --sand: #F3E3C4; --ink: #1B0F08; --ink-2: #3A2A1E;
+    --muted: #6E5B4A; --line: #E8D9BE; --saffron: #F2B829; --terracotta: #C8501E;
+    --terracotta-text: #A63F14; --green: #1E6B3C; --green-bg: #DCF1E2; --red: #B42318;
+    --red-bg: #FBE3DF; --amber: #6E4A00; --amber-bg: #FDEBB8; --clay: #8F3510; --clay-bg: #F9DCC4;
+    --bubble-out: #FDE9C9;
+    --serif: 'Playfair Display', Georgia, serif;
+    --sans: 'Work Sans', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--cream); }
+  body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  #stage { position: absolute; inset: 0; overflow: hidden;
+    background: radial-gradient(1100px 1300px at 50% 55%, #FFF8EA 0%, var(--cream) 60%, #F6E6C8 100%); }
+  .abs { position: absolute; will-change: transform, opacity; }
+
+  /* Intro words */
+  #intro { left: 0; right: 0; top: 520px; text-align: center; }
+  .word { display: block; font-family: var(--serif); font-style: italic; font-weight: 600;
+    font-size: 150px; line-height: 1.12; letter-spacing: -2px; }
+  #allOnYou { color: var(--terracotta); font-weight: 700; margin-top: 40px; }
+
+  /* Caption above the phone */
+  .caption { left: 60px; right: 60px; top: 108px; text-align: center; font-family: var(--serif);
+    font-style: italic; font-weight: 600; font-size: 72px; line-height: 1.1; letter-spacing: -1px; }
+  .caption em { font-style: italic; color: var(--terracotta); }
+
+  /* Phone */
+  #phone { left: 150px; top: 330px; width: 780px; height: 1560px; border-radius: 112px;
+    background: #120A05; padding: 20px; transform-origin: 50% 22%;
+    box-shadow: 0 60px 120px rgba(80, 40, 10, .28), 0 0 0 3px #3A2A1E inset; }
+  #screen { position: relative; width: 100%; height: 100%; border-radius: 92px; overflow: hidden;
+    background: var(--paper); }
+  .status { position: absolute; top: 0; left: 0; right: 0; height: 90px; display: flex;
+    align-items: center; justify-content: space-between; padding: 22px 70px 0; font-weight: 600; font-size: 30px; }
+  .island { position: absolute; top: 22px; left: 50%; width: 220px; height: 62px; margin-left: -110px;
+    background: #120A05; border-radius: 40px; }
+  .status-icons { display: flex; gap: 12px; align-items: center; }
+  .app-head { position: absolute; top: 108px; left: 44px; right: 44px; }
+  .app-title { display: flex; align-items: center; justify-content: space-between; }
+  .app-title h1 { font-family: var(--serif); font-weight: 700; font-size: 66px; letter-spacing: -1px; }
+  .needs { display: flex; align-items: center; gap: 12px; font-size: 26px; font-weight: 600;
+    padding: 12px 22px; border-radius: 999px; background: var(--clay-bg); color: var(--clay); }
+  .needs b { display: inline-block; min-width: 40px; height: 40px; line-height: 40px; text-align: center;
+    border-radius: 20px; background: var(--terracotta); color: #fff; font-size: 24px; }
+  .filters { display: flex; gap: 12px; margin-top: 22px; }
+  .filters span { font-size: 25px; font-weight: 500; padding: 10px 24px; border-radius: 999px;
+    border: 2px solid var(--line); color: var(--muted); }
+  .filters span.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  #list { position: absolute; top: 300px; left: 0; right: 0; bottom: 0; }
+
+  /* Chat rows */
+  .row { position: absolute; left: 28px; right: 28px; padding: 22px 22px 0 22px; border-radius: 30px;
+    overflow: hidden; }
+  .row.urgent { background: var(--red-bg); }
+  .row-top { display: flex; gap: 20px; align-items: center; }
+  .avatar { flex: none; width: 84px; height: 84px; border-radius: 42px; display: grid; place-items: center;
+    font-weight: 600; font-size: 30px; color: var(--ink-2); background: var(--sand); }
+  .row-main { flex: 1; min-width: 0; }
+  .row-name { display: flex; justify-content: space-between; align-items: baseline; }
+  .row-name strong { font-size: 31px; font-weight: 600; }
+  .row-name time { font-size: 23px; color: var(--muted); }
+  .row-msg { font-size: 28px; color: var(--ink-2); margin-top: 6px; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; }
+  .row-side { position: absolute; right: 22px; top: 70px; }
+  .dot { width: 22px; height: 22px; border-radius: 11px; background: var(--terracotta); }
+  .reply { margin: 16px 0 0 104px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+  .reply-text { font-size: 26px; line-height: 1.3; color: var(--ink-2); background: var(--bubble-out);
+    padding: 12px 18px; border-radius: 20px 20px 20px 6px; max-width: 580px; }
+  .reply-text .tick { color: #2F6FAE; font-weight: 600; margin-left: 6px; }
+  .reply-text .link { color: var(--terracotta-text); font-weight: 600; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 600;
+    padding: 7px 16px; border-radius: 999px; }
+  .pill-green { background: var(--green-bg); color: var(--green); }
+  .pill-amber { background: var(--amber-bg); color: var(--amber); }
+  .pill-jev { background: var(--terracotta); color: #fff; position: relative; }
+  .pill-clay { background: var(--clay-bg); color: var(--clay); }
+  .ring { position: absolute; inset: -4px; border-radius: 999px; border: 4px solid var(--terracotta); }
+  .ticket { font-size: 25px; color: var(--ink-2); line-height: 1.35; }
+  .ticket b { color: var(--red); }
+
+  /* Notification banner */
+  #notif { left: 26px; right: 26px; top: 104px; padding: 24px 26px; border-radius: 40px;
+    background: rgba(255, 250, 241, .96); box-shadow: 0 24px 60px rgba(40, 20, 5, .28);
+    display: flex; gap: 20px; align-items: flex-start; z-index: 5; }
+  .app-ico { flex: none; width: 76px; height: 76px; border-radius: 18px; background: var(--ink);
+    display: grid; place-items: center; font-family: var(--serif); font-style: italic; font-weight: 700;
+    color: var(--saffron); font-size: 36px; }
+  .notif-head { display: flex; justify-content: space-between; font-size: 23px; color: var(--muted); }
+  .notif-title { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .notif-body { font-size: 26px; line-height: 1.3; margin-top: 4px; color: var(--ink-2); }
+
+  /* End card */
+  #end { left: 0; right: 0; top: 640px; text-align: center; }
+  #endLogo { width: 220px; height: 220px; border-radius: 52px; background: var(--ink); margin: 0 auto;
+    display: grid; place-items: center; font-family: var(--serif); font-style: italic; font-weight: 700;
+    color: var(--saffron); font-size: 112px; box-shadow: 0 30px 70px rgba(80, 40, 10, .25); }
+  #endLine { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 104px;
+    line-height: 1.08; letter-spacing: -2px; margin-top: 90px; }
+  #endBrand { margin-top: 70px; font-size: 34px; font-weight: 600; letter-spacing: 12px; }
+  #endSub { margin-top: 22px; font-size: 28px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <div id="intro" class="abs">
+    <span class="word" id="w0">Orders.</span>
+    <span class="word" id="w1">Packing.</span>
+    <span class="word" id="w2">Ads.</span>
+    <span class="word" id="w3">Support.</span>
+    <span class="word" id="allOnYou">All on you.</span>
+  </div>
+
+  <div class="caption abs" id="c0">Every message.<br>All day.</div>
+  <div class="caption abs" id="c1">“Where’s my order?”<br><em>Answered.</em></div>
+  <div class="caption abs" id="c2">Product questions?<br><em>Answered.</em></div>
+  <div class="caption abs" id="c3">The one that matters?<br><em>Flagged by Jev.</em></div>
+
+  <div id="phone" class="abs">
+    <div id="screen">
+      <div class="island"></div>
+      <div class="status">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="34" height="22" viewBox="0 0 34 22"><rect x="0" y="14" width="6" height="8" rx="2" fill="#1B0F08"/><rect x="9" y="10" width="6" height="12" rx="2" fill="#1B0F08"/><rect x="18" y="5" width="6" height="17" rx="2" fill="#1B0F08"/><rect x="27" y="0" width="6" height="22" rx="2" fill="#1B0F08"/></svg>
+          <svg width="50" height="24" viewBox="0 0 50 24"><rect x="1" y="1" width="42" height="22" rx="7" fill="none" stroke="#1B0F08" stroke-width="2" opacity=".5"/><rect x="5" y="5" width="30" height="14" rx="4" fill="#1B0F08"/><rect x="45" y="8" width="4" height="8" rx="2" fill="#1B0F08" opacity=".5"/></svg>
+        </span>
+      </div>
+      <div class="app-head">
+        <div class="app-title"><h1>Inbox</h1><span class="needs">Needs reply <b id="needsCount">0</b></span></div>
+        <div class="filters"><span class="on">All</span><span>Needs reply</span><span>Tickets</span></div>
+      </div>
+      <div id="list"></div>
+      <div id="notif" class="abs">
+        <div class="app-ico">TK</div>
+        <div style="flex:1">
+          <div class="notif-head"><span>THAKAR INBOX</span><span>now</span></div>
+          <div class="notif-title">Jev · Urgent: Riya S. is upset</div>
+          <div class="notif-body">Money deducted, order not received. Ticket #1042 is waiting for you.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="end" class="abs">
+    <div id="endLogo">TK</div>
+    <div id="endLine">Support that<br>runs itself.</div>
+    <div id="endBrand">THAKAR KITCHEN</div>
+    <div id="endSub">Order updates · AI answers · Jev flags what’s urgent</div>
+  </div>
+</div>
+
+<script>
+// ---- Timing helpers -------------------------------------------------------
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const easeOut = (x) => 1 - Math.pow(1 - x, 4);           // soft landing
+const easeInOut = (x) => (x < 0.5 ? 8 * x ** 4 : 1 - Math.pow(-2 * x + 2, 4) / 2);
+// Eased 0..1 progress of t across [start, start + dur].
+const p = (t, start, dur, ease = easeOut) => ease(clamp((t - start) / dur));
+const lerp = (a, b, k) => a + (b - a) * k;
+const $ = (id) => document.getElementById(id);
+const set = (el, opacity, transform = '') => { el.style.opacity = opacity; el.style.transform = transform; };
+
+// ---- Chat rows ------------------------------------------------------------
+// at: arrives, rt: reply appears, kind: what handles it.
+const ROWS = [
+  { id: 'r1', name: 'Ankit M.', init: 'AM', msg: 'Where is my order #2291?', time: '9:38', at: 3.9,
+    kind: 'wismo', rt: 6.9, reply: 'Out for delivery today. <span class="link">Track →</span>' },
+  { id: 'r2', name: 'Priya K.', init: 'PK', msg: 'Does the dal need a fridge?', time: '9:39', at: 4.35,
+    kind: 'faq', rt: 9.2, reply: 'No fridge needed. It stays good for 12 months on the shelf.' },
+  { id: 'r3', name: 'Nisha P.', init: 'NP', msg: 'Mera order kab aayega?', time: '9:40', at: 4.8,
+    kind: 'wismo', rt: 6.4, reply: 'Shipped. Arrives Thu. <span class="link">Track →</span>' },
+  { id: 'r4', name: 'Rahul D.', init: 'RD', msg: 'Do you deliver to Pune?', time: '9:40', at: 5.2,
+    kind: 'faq', rt: 9.65, reply: 'Yes! We ship across India, usually in 3–5 days.' },
+  { id: 'r5', name: 'Meera J.', init: 'MJ', msg: 'Kevi rite garam karvanu?', time: '9:41', at: 5.55,
+    kind: 'faq', rt: 10.1, reply: 'Pouch ne ukalta pani ma 3–4 minute rakho.' },
+  { id: 'r6', name: 'Riya S.', init: 'RS', msg: 'Paisa kat gaya, order nahi aaya!!', time: 'now', at: 11.2,
+    kind: 'urgent', rt: 12.5 },
+];
+const BASE_H = 128;   // row without a reply: 22 padding + 84 avatar + 22 padding
+const GAP = 12;
+// Reply block height (its 16px top margin included), measured so wrapped replies fit.
+const replyHeight = (r) => $(r.id + '-reply').offsetHeight + 16;
+
+const list = $('list');
+for (const r of ROWS) {
+  const el = document.createElement('div');
+  el.className = 'row' + (r.kind === 'urgent' ? ' urgent' : '');
+  el.id = r.id;
+  let replyHtml;
+  if (r.kind === 'urgent') {
+    replyHtml = `<span class="pill pill-jev" id="${r.id}-pill"><span class="ring" id="${r.id}-ring"></span>Jev · Urgent · Angry</span>
+      <span class="ticket">Ticket <b>#1042</b> · Payment · no auto-reply, waiting for you</span>`;
+  } else {
+    const pill = r.kind === 'wismo'
+      ? '<span class="pill pill-green">✓ Auto-answered</span>'
+      : '<span class="pill pill-amber">✓ AI answer</span>';
+    replyHtml = `<span class="reply-text">${r.reply}<span class="tick">✓✓</span></span>${pill}`;
+  }
+  el.innerHTML = `
+    <div class="row-top">
+      <div class="avatar" style="${r.kind === 'urgent' ? 'background:#F6C9C0' : ''}">${r.init}</div>
+      <div class="row-main">
+        <div class="row-name"><strong>${r.name}</strong><time>${r.time}</time></div>
+        <div class="row-msg">${r.msg}</div>
+      </div>
+    </div>
+    <div class="row-side"><div class="dot" id="${r.id}-dot"></div></div>
+    <div class="reply" id="${r.id}-reply">${replyHtml}</div>`;
+  list.appendChild(el);
+  r.el = el;
+}
+
+function renderRows(t) {
+  // Newest rows sit on top and push older ones down.
+  let y = 0;
+  let needs = 0;
+  for (const r of [...ROWS].reverse()) {
+    const arrive = p(t, r.at, 0.45);
+    const replied = p(t, r.rt, 0.5);
+    const h = (BASE_H + replied * replyHeight(r)) * arrive;
+    const el = r.el;
+    el.style.top = y + 'px';
+    el.style.height = h + 'px';
+    // Handled rows step back once Jev raises the urgent one.
+    const dim = r.kind === 'urgent' ? 0 : p(t, 12.0, 0.6) * 0.55;
+    el.style.opacity = arrive * (1 - dim);
+    el.style.transform = `translateY(${(1 - arrive) * -30}px) scale(${lerp(0.96, 1, arrive)})`;
+    $(r.id + '-dot').style.opacity = 1 - replied;
+    $(r.id + '-reply').style.opacity = replied;
+    $(r.id + '-reply').style.transform = `translateY(${(1 - replied) * 16}px)`;
+    if (t >= r.at && t < r.rt) needs++;
+    if (r.kind === 'urgent' && t >= r.at) needs = Math.max(needs, 1);
+    y += h + GAP * arrive;
+  }
+  $('needsCount').textContent = needs;
+
+  // Jev's urgent pill: pops in, then a soft pulsing ring.
+  const pill = p(t, 12.5, 0.5, (x) => 1 + 2.2 * (x - 1) ** 3 + 1.2 * (x - 1) ** 2); // back-out
+  $('r6-pill').style.transform = `scale(${lerp(0.6, 1, pill)})`;
+  const phase = ((t - 12.9) % 1.1) / 1.1;
+  const ring = $('r6-ring');
+  if (t > 12.9) {
+    ring.style.opacity = (1 - phase) * 0.7;
+    ring.style.transform = `scale(${1 + phase * 0.35}, ${1 + phase * 0.9})`;
+  } else ring.style.opacity = 0;
+  // The angry row's red tint gently breathes until the end.
+  $('r6').style.boxShadow = t > 12.5
+    ? `0 0 0 ${3 + 3 * Math.sin((t - 12.5) * 5)}px rgba(200,80,30,${0.35 * p(t, 12.5, 0.4)})` : 'none';
+}
+
+// ---- Captions ---------------------------------------------------------------
+const CAPS = [['c0', 3.5, 6.0], ['c1', 6.15, 8.9], ['c2', 9.05, 10.95], ['c3', 11.1, 15.0]];
+function renderCaptions(t) {
+  for (const [id, a, b] of CAPS) {
+    const k = p(t, a, 0.45) * (1 - p(t, b - 0.3, 0.3, easeInOut));
+    set($(id), k, `translateY(${(1 - p(t, a, 0.45)) * 30}px)`);
+  }
+}
+
+// ---- Frame ----------------------------------------------------------------
+window.render = function (t) {
+  // Intro: one word at a time, then "All on you."
+  ['w0', 'w1', 'w2', 'w3'].forEach((id, i) => {
+    const k = p(t, 0.15 + i * 0.38, 0.55);
+    const fade = lerp(1, 0.28, p(t, 1.95, 0.5, easeInOut));
+    set($(id), k * fade, `translateY(${(1 - k) * 60}px)`);
+  });
+  const ay = p(t, 2.0, 0.55);
+  set($('allOnYou'), ay, `translateY(${(1 - ay) * 50}px)`);
+  const out = p(t, 2.95, 0.5, easeInOut);
+  $('intro').style.opacity = 1 - out;
+  $('intro').style.transform = `translateY(${-120 * out}px)`;
+
+  // Phone rises, slowly pushes in, then leaves for the end card.
+  const rise = p(t, 3.0, 0.9);
+  // Slow drift, then a firmer push towards the urgent row when Jev flags it.
+  const push = lerp(1, 1.03, p(t, 4.0, 7.0, easeInOut)) * lerp(1, 1.06, p(t, 11.6, 2.4, easeInOut));
+  const leave = p(t, 14.9, 0.8, easeInOut);
+  $('phone').style.opacity = rise * (1 - leave);
+  $('phone').style.transform =
+    `translateY(${(1 - rise) * 1500 + leave * 900}px) scale(${lerp(0.94, 1, rise) * push * lerp(1, 0.9, leave)})`;
+
+  renderCaptions(t);
+  renderRows(t);
+
+  // Lock-screen style banner from Jev.
+  const nIn = p(t, 13.0, 0.55);
+  const nOut = p(t, 14.55, 0.4, easeInOut);
+  set($('notif'), nIn * (1 - nOut), `translateY(${(1 - nIn) * -220 - nOut * 220}px)`);
+
+  // End card.
+  const logo = p(t, 15.45, 0.7);
+  const line = p(t, 15.75, 0.8);
+  const brand = p(t, 16.2, 0.7);
+  set($('endLogo'), logo, `scale(${lerp(0.85, 1, logo)})`);
+  set($('endLine'), line, `translateY(${(1 - line) * 50}px)`);
+  set($('endBrand'), brand, `translateY(${(1 - brand) * 30}px)`);
+  set($('endSub'), p(t, 16.5, 0.7), '');
+  $('end').style.opacity = logo > 0 ? 1 : 0;
+};
+
+window.DURATION = 18;
+window.render(Number(new URLSearchParams(location.search).get('t') || 0));
+</script>
+</body>
+</html>
