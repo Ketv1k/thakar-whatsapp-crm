@@ -173,8 +173,8 @@
   /* Notification */
   #notif { left: 26px; right: 26px; top: 104px; padding: 22px 24px; border-radius: 40px; z-index: 50;
     background: rgba(255, 250, 241, .97); box-shadow: 0 24px 60px rgba(40, 20, 5, .3); display: flex; gap: 18px; opacity: 0; }
-  .app-ico { flex: none; width: 74px; height: 74px; border-radius: 18px; background: var(--ink); display: grid; place-items: center;
-    font-family: var(--serif); font-style: italic; font-weight: 700; color: var(--saffron); font-size: 34px; }
+  .app-ico { flex: none; width: 76px; height: 76px; border-radius: 18px; background: #fff; border: 2px solid var(--line); padding: 3px; }
+  .app-ico img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .notif-head { display: flex; justify-content: space-between; font-size: 22px; color: var(--muted); }
   .notif-title { font-size: 27px; font-weight: 700; margin-top: 3px; }
   .notif-body { font-size: 25px; line-height: 1.3; margin-top: 3px; color: var(--ink-2); }
@@ -240,13 +240,10 @@
     border: 3px solid rgba(255, 250, 241, .9); z-index: 100; opacity: 0; }
 
   /* End card */
-  #end { left: 0; right: 0; top: 560px; text-align: center; opacity: 0; }
-  #endLogo { width: 210px; height: 210px; border-radius: 50px; background: var(--ink); margin: 0 auto; display: grid;
-    place-items: center; font-family: var(--serif); font-style: italic; font-weight: 700; color: var(--saffron);
-    font-size: 108px; box-shadow: 0 30px 70px rgba(80, 40, 10, .25); }
+  #end { left: 0; right: 0; top: 400px; text-align: center; opacity: 0; }
+  #endLogo { display: block; width: 560px; height: 560px; margin: 0 auto; }
   #endLine { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 104px; line-height: 1.08;
-    letter-spacing: -2px; margin-top: 80px; }
-  #endBrand { margin-top: 60px; font-size: 34px; font-weight: 600; letter-spacing: 12px; }
+    letter-spacing: -2px; margin-top: 30px; }
   #endChips { margin: 60px auto 0; width: 900px; display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
   #endChips span { font-size: 30px; font-weight: 600; padding: 14px 28px; border-radius: 999px; background: #fff;
     border: 2px solid var(--line); color: var(--ink-2); }
@@ -507,7 +504,7 @@
       </section>
 
       <div id="notif" class="abs">
-        <div class="app-ico">TK</div>
+        <div class="app-ico"><img src="assets/thakar-logo.png" alt=""></div>
         <div style="flex:1">
           <div class="notif-head"><span>THAKAR INBOX</span><span>now</span></div>
           <div class="notif-title">Jev · Urgent: Riya S. is upset</div>
@@ -520,9 +517,8 @@
   <div id="tap" class="abs"></div>
 
   <div id="end" class="abs">
-    <div id="endLogo">TK</div>
+    <img id="endLogo" src="assets/thakar-logo.png" alt="Thakar Kitchen">
     <div id="endLine">Support that<br>runs itself.</div>
-    <div id="endBrand">THAKAR KITCHEN</div>
     <div id="endChips">
       <span>Inbox</span><span>Tickets</span><span>AI answers</span><span class="hl">Jev</span><span>Order updates</span>
       <span>COD</span><span>Cart recovery</span><span>CRM</span><span>Campaigns</span>
@@ -791,11 +787,9 @@ window.render = function (t) {
   // End card
   const logo = p(t, 31.75, 0.7);
   const line = p(t, 32.05, 0.8);
-  const brand = p(t, 32.5, 0.7);
   $('end').style.opacity = logo > 0 ? 1 : 0;
   set($('endLogo'), logo, `scale(${lerp(0.85, 1, logo)})`);
   set($('endLine'), line, `translateY(${(1 - line) * 50}px)`);
-  set($('endBrand'), brand, `translateY(${(1 - brand) * 30}px)`);
   [...$('endChips').children].forEach((el, i) => {
     const k = p(t, 32.9 + i * 0.1, 0.45);
     set(el, k, `translateY(${(1 - k) * 24}px) scale(${lerp(0.9, 1, k)})`);

@@ -15,9 +15,12 @@ app navigates itself through every feature.
 | 20.5–23.5s | Abandoned carts? Brought back. | Cart reminder → order #2318 placed, recovered cart |
 | 23.5–28.5s | Every customer, known by heart. | Customer stages → VIP → Kavya's profile (orders, spend, history, tags, reorder reminder) |
 | 28.5–31.5s | Campaigns that pay for themselves. | Campaign results (read 91%, 14 orders, ₹23,800) and the automatic reminders |
-| 31.5–35s | *Support that runs itself.* | THAKAR KITCHEN and a row of every feature |
+| 31.5–35s | *Support that runs itself.* | The Thakar Kitchen logo and a row of every feature |
 
 The numbers are realistic sample data, not real store figures.
+
+Both videos use the Thakar Kitchen logo (`assets/thakar-logo.png`) on the end card and as the app icon
+on the phone notification. It is the logo from thakarkitchen.com with the white background made transparent.
 
 ## Support cut (18s)
 `thakar-support-promo.mp4`: an 18-second vertical (1080×1920) promo with no sound, for Reels, Shorts,
@@ -30,7 +33,7 @@ LinkedIn and WhatsApp status. `poster.png` is the end card, for use as a thumbna
 | 6–9s | "Where's my order?" gets an automatic answer from Shopify tracking |
 | 9–11s | Product questions are answered by AI from the shop's own information |
 | 11–15s | An angry message gets flagged by Jev: Urgent, Ticket #1042, the founder is notified |
-| 15–18s | *Support that runs itself.* THAKAR KITCHEN |
+| 15–18s | The Thakar Kitchen logo, *Support that runs itself.* |
 
 ## Re-rendering
 Each video is one HTML file: `window.render(t)` draws the frame at `t` seconds, and

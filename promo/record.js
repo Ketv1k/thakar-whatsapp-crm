@@ -39,6 +39,7 @@ async function main() {
       ...[400, 500, 600, 700].map((w) => document.fonts.load(`${w} 30px "Work Sans"`)),
     ]);
     await document.fonts.ready;
+    await Promise.all([...document.images].map((img) => img.decode()));
   });
   const fontsOk = await page.evaluate(
     () => document.fonts.check('italic 600 100px "Playfair Display"') && document.fonts.check('600 30px "Work Sans"')

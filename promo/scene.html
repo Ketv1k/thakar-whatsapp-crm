@@ -92,21 +92,17 @@
   #notif { left: 26px; right: 26px; top: 104px; padding: 24px 26px; border-radius: 40px;
     background: rgba(255, 250, 241, .96); box-shadow: 0 24px 60px rgba(40, 20, 5, .28);
     display: flex; gap: 20px; align-items: flex-start; z-index: 5; }
-  .app-ico { flex: none; width: 76px; height: 76px; border-radius: 18px; background: var(--ink);
-    display: grid; place-items: center; font-family: var(--serif); font-style: italic; font-weight: 700;
-    color: var(--saffron); font-size: 36px; }
+  .app-ico { flex: none; width: 76px; height: 76px; border-radius: 18px; background: #fff; border: 2px solid var(--line); padding: 3px; }
+  .app-ico img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .notif-head { display: flex; justify-content: space-between; font-size: 23px; color: var(--muted); }
   .notif-title { font-size: 28px; font-weight: 700; margin-top: 4px; }
   .notif-body { font-size: 26px; line-height: 1.3; margin-top: 4px; color: var(--ink-2); }
 
   /* End card */
-  #end { left: 0; right: 0; top: 640px; text-align: center; }
-  #endLogo { width: 220px; height: 220px; border-radius: 52px; background: var(--ink); margin: 0 auto;
-    display: grid; place-items: center; font-family: var(--serif); font-style: italic; font-weight: 700;
-    color: var(--saffron); font-size: 112px; box-shadow: 0 30px 70px rgba(80, 40, 10, .25); }
+  #end { left: 0; right: 0; top: 470px; text-align: center; }
+  #endLogo { display: block; width: 560px; height: 560px; margin: 0 auto; }
   #endLine { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 104px;
-    line-height: 1.08; letter-spacing: -2px; margin-top: 90px; }
-  #endBrand { margin-top: 70px; font-size: 34px; font-weight: 600; letter-spacing: 12px; }
+    line-height: 1.08; letter-spacing: -2px; margin-top: 30px; }
   #endSub { margin-top: 22px; font-size: 28px; color: var(--muted); }
 </style>
 </head>
@@ -142,7 +138,7 @@
       </div>
       <div id="list"></div>
       <div id="notif" class="abs">
-        <div class="app-ico">TK</div>
+        <div class="app-ico"><img src="assets/thakar-logo.png" alt=""></div>
         <div style="flex:1">
           <div class="notif-head"><span>THAKAR INBOX</span><span>now</span></div>
           <div class="notif-title">Jev · Urgent: Riya S. is upset</div>
@@ -153,9 +149,8 @@
   </div>
 
   <div id="end" class="abs">
-    <div id="endLogo">TK</div>
+    <img id="endLogo" src="assets/thakar-logo.png" alt="Thakar Kitchen">
     <div id="endLine">Support that<br>runs itself.</div>
-    <div id="endBrand">THAKAR KITCHEN</div>
     <div id="endSub">Order updates · AI answers · Jev flags what’s urgent</div>
   </div>
 </div>
@@ -302,10 +297,8 @@ window.render = function (t) {
   // End card.
   const logo = p(t, 15.45, 0.7);
   const line = p(t, 15.75, 0.8);
-  const brand = p(t, 16.2, 0.7);
   set($('endLogo'), logo, `scale(${lerp(0.85, 1, logo)})`);
   set($('endLine'), line, `translateY(${(1 - line) * 50}px)`);
-  set($('endBrand'), brand, `translateY(${(1 - brand) * 30}px)`);
   set($('endSub'), p(t, 16.5, 0.7), '');
   $('end').style.opacity = logo > 0 ? 1 : 0;
 };
