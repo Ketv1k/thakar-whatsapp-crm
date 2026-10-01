@@ -19,8 +19,9 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'Thakar Kitchen', {
       body: data.body || '',
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/icon-192.png',
+      // Android shows the badge as a one-colour silhouette.
+      badge: '/icon-badge.png',
       tag: data.tag,
       renotify: !!data.tag,
       data: { url: data.url || '/' },
